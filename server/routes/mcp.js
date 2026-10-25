@@ -1,3 +1,4 @@
+import { mcpDiagnostics } from '../lib/mcp/diagnostics.js';
 /**
  * server/routes/mcp.js — Model Context Protocol endpoint (#103).
  *
@@ -98,6 +99,7 @@ router.use((req, res, next) => {
   if (!ENABLED) return res.status(404).json({ error: 'MCP not enabled on this server' });
   next();
 });
+router.use(mcpDiagnostics);
 router.use((req, res, next) => {
   res.set('Cache-Control','no-store');
   res.set('Vary','Origin');
@@ -109,6 +111,7 @@ router.use((req, res, next) => {
   }
   const origin = req.get('origin');
   if (!_isOriginAllowed(origin)) {
+    res.locals.mcpFailure = 'origin_rejected';
     return res.status(403).json({
       error:
         'Origin not allowed. Server-to-server clients (Claude Desktop etc.) work by ' +

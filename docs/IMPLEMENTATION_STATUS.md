@@ -147,3 +147,12 @@ Los append nutricionales siguen sin idempotencia persistente: ante resultado amb
 - `src/lib/body-catalog.test.ts`
 - `src/server/tools/services.test.ts`
 
+
+
+## Corrección de discovery y diagnóstico de producción (2026-10-25)
+
+El propietario confirmó instalación y login OAuth, pero Refresh tools falla. Los logs reales compartidos muestran POST 403 antes del catálogo; no contienen todavía el motivo de rechazo. No se atribuye ese 403 a esquemas o a versiones sin evidencia.
+
+Se reprodujo con el cliente MCP oficial que SDK 1.30 descarta el descriptor principal `securitySchemes`; se corrigió en el transporte manteniendo el espejo `_meta`. La prueba falló antes y pasó después. El cliente real negoció 2025-11-25, recibió 19 tools estables en modo Gym, incluidas las seis requeridas, y validó todos sus esquemas con JSON Schema. Se añadieron logs de campos permitidos para correlacionar método/versión/estado/request_id, scopes efectivos y motivos de rechazo sin credenciales, claims personales ni argumentos.
+
+Regresión focalizada final: **135 pruebas pasaron, 0 fallaron, 0 omitidas**, con `node --experimental-global-webcrypto --test scripts/mcp-*.test.js scripts/public-api-v1-wiring.test.js scripts/body-source-client.test.js`, Node 20.20.2 y copia aislada. No se repitieron la suite completa ni los builds UI. No se alteraron datos reales, Auth0 ni Gym Log. La validación autenticada final en ChatGPT/Railway requiere volver a refrescar y comprobar la línea nueva de diagnóstico; no se declara resuelta la conexión real solo por los tests locales. Ver [procedimiento](chatgpt-mcp.md#diagnóstico-de-authentication-succeeded-action-discovery-failed).

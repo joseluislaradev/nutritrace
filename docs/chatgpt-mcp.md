@@ -1,6 +1,6 @@
 # NutriTrace privado en ChatGPT: operación OAuth y PAT
 
-Implementación local del fork; no se ha configurado Auth0, instalado la app ni desplegado con esta tarea. Gym Log conserva su autenticación. NutriTrace es un **resource server** OAuth: el proveedor externo gestiona login, consentimiento, PKCE, códigos, refresh y revocación del grant.
+El fork está publicado en Railway; el propietario confirmó login OAuth e instalación en ChatGPT. El refresco del catálogo está en diagnóstico; login correcto no demuestra que el resource server acepte el token. Gym Log conserva su autenticación. NutriTrace es un **resource server** OAuth: el proveedor externo gestiona login, consentimiento, PKCE, códigos, refresh y revocación del grant.
 
 ## Configuración del servidor
 
@@ -97,3 +97,40 @@ El proveedor y ChatGPT renuevan los tokens. NutriTrace valida cada access token 
 Revocar/desconectar el grant o refresh token impide renovar, pero un JWT ya emitido puede funcionar hasta su expiración. Verificar ese TTL residual, no prometer revocación instantánea. Para corte inmediato de toda la vía OAuth: `MCP_OAUTH_ENABLED=0` y reinicio, conservando PAT. Antes de reactivar, revocar el grant y fijar `MCP_OAUTH_VALID_AFTER` para rechazar emisiones antiguas. Revocar un PAT elimina su acceso en la siguiente petición. Cerrar sesión PWA no revoca por sí solo conexiones OAuth.
 
 La validación local de JWT no ofrece revocación selectiva instantánea por conexión. Se necesitaría introspección/estado adicional si ese requisito apareciera; no se implementó infraestructura nueva para el único usuario.
+
+## Diagnóstico de “Authentication succeeded, action discovery failed”
+
+El 2026-10-25 los logs aportados por el propietario mostraron `POST /api/mcp` → `403` con cuerpo de 413 bytes después de probes `401`. No había evidencia de `tools/list` → `200`. Los probes públicos sin credenciales confirmaron metadata `200`, challenge `401` y rechazo `403` de `Origin: https://chatgpt.com` cuando ese origen no está permitido. Este último probe es de diagnóstico, no prueba de que ChatGPT esté enviando ese Origin.
+
+Defecto local reproducido y corregido: SDK 1.30 ignora el `securitySchemes` principal de `registerTool`. El transporte ahora conserva ese campo en el JSON-RPC real de `tools/list`, además de `_meta.securitySchemes`. No modifica el despacho de herramientas ni concede permisos.
+
+`node --experimental-global-webcrypto --test scripts/mcp-discovery.test.js` usa el cliente oficial MCP Streamable HTTP, SQLite temporal, JWT RSA sintético y los routers reales. Negocia `initialize`, envía `notifications/initialized` y obtiene `tools/list` dos veces. Verifica las seis herramientas `get_goals`, `search_foods`, `log_food`, `create_food`, `edit_diary_entry`, `delete_diary_entry`, catálogo estable de 19 herramientas en modo Gym, validación de todos los esquemas JSON y ambos descriptores OAuth. **Es evidencia local, no una llamada autenticada al Railway real.**
+
+### Leer el motivo de un rechazo sin exponer credenciales
+
+Cada POST MCP registra una línea `[mcp:diagnostic]` con el mismo `request_id` que el log HTTP, método RPC reconocido, estado, versión, scopes MCP efectivos, número de tools y motivo enumerado. No registra Authorization, cookies, JWT, `sub`, cliente, ID SQLite, argumentos, mensajes arbitrarios ni datos de salud. No requiere habilitar `LOG_LEVEL=trace` ni nuevas variables privadas.
+
+Después del despliegue, repetir una sola vez Refresh tools y buscar ese `request_id`:
+
+| `reason` | Corrección concreta, en configuración privada |
+|---|---|
+| `owner_mismatch` | `MCP_OAUTH_OWNER_SUB` debe ser el User ID/`sub` exacto de la identidad Auth0 que completó el login; no username/email ni ID SQLite |
+| `client_mismatch` | `MCP_OAUTH_CLIENT_ID` debe ser el Client ID del cliente predefinido configurado en esta conexión ChatGPT NutriTrace; no el de Gym ni el identifier de la API |
+| `local_user_missing` | Verificar el ID con la sesión PWA mediante `GET /api/auth/me` y configurar ese ID en `MCP_OAUTH_USER_ID`, apuntando al volumen/cuenta existentes |
+| `auth_scope` | El token carece de todos los scopes MCP admitidos. Conceder al dueño los scopes de la API NutriTrace y solicitarlos/consentirlos en el grant. Si hay RBAC `permissions`, también debe permitirlos. Reautorizar la conexión |
+| `origin_rejected` | Solo si la petición real incluye ese Origin: añadir el origen exacto a `ALLOWED_ORIGINS` conservando los existentes; sin comodines |
+| `jwt_issuer` / `jwt_audience` | Comparar issuer con discovery Auth0 y audience con la URL canónica completa `/api/mcp`; revisar resource/audience del grant |
+| `jwt_expired` / `jwt_time` | Renovar/reautorizar; revisar TTL, reloj y `MCP_OAUTH_VALID_AFTER` sin relajar validación |
+| `jwt_key` / `jwt_signature` / `jwt_invalid` | Revisar emisor/JWKS y token de acceso emitido; no usar ID token, JWT de Gym o sesión PWA |
+
+Un `403` no demuestra por sí solo qué fila aplica. La validación se mantiene cerrada. Un token con `mcp:read` sí descubre el catálogo OAuth habilitado; scopes de escritura/destroy se comprueban por llamada. Sin ningún scope MCP se rechaza antes del SDK, nunca se devuelve una lista vacía como supuesto éxito.
+
+### Versiones, transporte y refresh
+
+La dependencia actual soporta versiones hasta **2025-11-25**. En versiones compatibles, initialize/list responden `200 application/json`; la notificación initialized responde `202`. Accept debe incluir **application/json y text/event-stream**; omitir uno produce `406`. Content-Type de petición debe ser application/json (`415` de otro modo). No se requieren sesiones ni GET persistente. GET `405` es intencional.
+
+El protocolo 2026-07-28 introduce `server/discover` y metadata por petición. Este servidor sigue la era initialize: una petición con ese header moderno devuelve `400`; un `server/discover` sin header moderno devuelve JSON-RPC `-32601`. Un cliente de ambas eras debe hacer fallback a initialize y usar la versión negociada. No anunciar soporte 2026 sin implementar su contrato. Los logs de la petición real permiten comprobar si el cliente hizo fallback; los probes locales no identifican la versión que ChatGPT emplea en una cuenta concreta.
+
+El discovery público de Auth0 de esta instalación anuncia `offline_access` y grant `refresh_token`. Eso no demuestra que el cliente/API/grant particular estén habilitados o que se haya emitido un refresh token. Configurar Allow Offline Access en la API, grant Refresh Token en el cliente y rotación; reautorizar si cambió. La falta de renovación puede explicar pérdida de acceso al expirar; no se atribuye un `403` inmediato a refresh sin evidencia.
+
+Fuentes: [OpenAI: autenticación](https://developers.openai.com/plugins/build/auth), [descriptores y espejo de seguridad](https://developers.openai.com/plugins/reference), [MCP: compatibilidad entre eras](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning). No habilitar acceso anónimo para eludir este problema.

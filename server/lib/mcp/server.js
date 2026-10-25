@@ -1,3 +1,4 @@
+import { preserveDiscoveryMetadata } from './discovery.js';
 import { authorizedRegistrar } from './auth-policy.js';
 /**
  * server/lib/mcp/server.js
@@ -25,6 +26,7 @@ export async function handleMcpRequest(req, res) {
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
   });
+  preserveDiscoveryMetadata(transport, res);
   const server = new McpServer(
     {
       name: 'nutritrace',

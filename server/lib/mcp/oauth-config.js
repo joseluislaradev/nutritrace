@@ -1,6 +1,6 @@
 export const envFlag = v => ['1','true','yes','on'].includes(String(v || '').trim().toLowerCase());
 export class McpAuthError extends Error {
-  constructor(status, code, scope) { super(code); Object.assign(this, {status, code, scope}); }
+  constructor(status, code, scope, diagnostic) { super(code); Object.assign(this, {status, code, scope, diagnostic}); }
 }
 const configError = () => new McpAuthError(503, 'oauth_not_configured');
 function httpsUrl(raw) {
@@ -32,6 +32,7 @@ export function authChallenge(scope = 'mcp:read') {
 }
 export function sendAuthError(res, e) {
   const status = e instanceof McpAuthError ? e.status : 401;
+  res.locals.mcpFailure = e instanceof McpAuthError ? e.diagnostic || e.code : 'jwt_invalid';
   res.set('Cache-Control','no-store');
   if (status === 401 || (status === 403 && e.scope)) res.set('WWW-Authenticate', `${authChallenge(e.scope)}, error="${status === 403 ? 'insufficient_scope' : 'invalid_token'}"`);
   return res.status(status).json({error: e instanceof McpAuthError ? e.code : 'invalid_access_token'});

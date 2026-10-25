@@ -18,7 +18,7 @@ export function createMcpAuth(verify = verifyOAuthToken) {
     try {
       req.mcpAuth = await verify(match[1]);
       const user = db.prepare('SELECT id FROM users WHERE id=?').get(req.mcpAuth.userId);
-      if (!user) throw new McpAuthError(403,'owner_not_allowed');
+      if (!user) throw new McpAuthError(403,'owner_not_allowed',undefined,'local_user_missing');
       const key = req.mcpAuth.principalId, now = Date.now();
       for (const [k,b] of counts) if (b.reset <= now) counts.delete(k);
       const b = counts.get(key) || {reset:now+60000,count:0};
