@@ -1,3 +1,4 @@
+import { externalBody, nutritionGoals } from '../../body-source-policy.js';
 /**
  * MCP tool: get_goals
  *
@@ -36,7 +37,7 @@ export function getGoalsCore(userId) {
     const parsed = safeJson(water.value, null);
     if (typeof parsed === 'number' && Number.isFinite(parsed)) waterGoalMl = parsed;
   }
-  return { goals, water_goal_ml: waterGoalMl };
+  return { goals: externalBody() ? nutritionGoals(goals) : goals, water_goal_ml: waterGoalMl };
 }
 
 export function registerGetGoals(server, { userId }) {

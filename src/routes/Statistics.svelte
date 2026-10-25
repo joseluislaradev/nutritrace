@@ -1,4 +1,5 @@
 <script>
+  import { externalBodyMode, isBodyMetric } from '../lib/body-source.js';
   import { closeOnBack } from '../lib/back-stack.js';
   import { onMount, onDestroy } from 'svelte';
   import { slide } from 'svelte/transition';
@@ -128,6 +129,7 @@
   ];
 
   // All available metrics = NUTRIMENTS + body stats + wellness
+  $: if ($externalBodyMode && (BODY_STATS.some(s => s.value===metric) || WELLNESS_METRICS.some(s=>s.value===metric && isBodyMetric(s.apiField || s.value)))) metric='calories';
   $: BODY_STATS = [
     { value: 'weight',     label: 'Weight',     unit: $weightUnit || 'lb' },
     { value: 'neck',       label: 'Neck',       unit: $lengthUnit || 'in' },
@@ -145,9 +147,9 @@
   function _metricKey(m) { return m?.value ?? m?.id; }
   $: _rawMetrics = [
     ...NUTRIMENTS.filter(n => n.default),
-    ...BODY_STATS.filter(s => !($hiddenBodyStats||[]).includes(s.value)),
+    ...BODY_STATS.filter(s => !$externalBodyMode && !($hiddenBodyStats||[]).includes(s.value)),
     ...(_waterShowInStats ? [{ value: 'water', label: 'Water', unit: _waterUnit }] : []),
-    ...WELLNESS_METRICS,
+    ...WELLNESS_METRICS.filter(s => !$externalBodyMode || !isBodyMetric(s.apiField || s.value || s.id)),
   ];
   // Apply the user's Statistics-specific hide list, then reorder by the
   // user's saved order. Metrics not in the order array append at the end

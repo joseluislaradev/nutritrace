@@ -1,4 +1,5 @@
 <script>
+  import { externalBodyMode } from '../lib/body-source.js';
   import { closeOnBack } from '../lib/back-stack.js';
   import { onMount, onDestroy, tick } from 'svelte';
   import { fold } from '../lib/fold.js';
@@ -183,6 +184,7 @@
   let bodyStatsData = {};
   let weightInput;            // focus target when the sheet opens
   function openBodyStats() {
+    if ($externalBodyMode) return;
     const raw = entry.bodyStats || {};
     const wu = $weightUnit || 'kg';
     const lu = $lengthUnit || 'in';
@@ -235,6 +237,7 @@
   }
 
   async function saveBodyStatsLocal() {
+    if ($externalBodyMode) return;
     // Normalize each numeric field via parseDecimal so a comma survives
     // to a period even in the rare case a paste bypasses the input action
     // (#160 follow-up). Only touch fields that hold user-typed strings —
@@ -1880,7 +1883,7 @@
       onOpen={() => showWaterQuickAdd = true}
     />
   {/if}
-  {#if $diaryRailShowBodyStats}
+  {#if !$externalBodyMode && $diaryRailShowBodyStats}
     <BodyStatsWidget
       currentWeight={_widgetWeight}
       weightUnit={$weightUnit || 'kg'}
@@ -1938,9 +1941,9 @@
       <button class="btn-icon accent" on:click={() => diaryShowNutritionSummary.set(true)} aria-label={$_('diary.actions.nutrition_summary')} title={$_('diary.actions.nutrition_summary_long')}>
         <span class="material-symbols-rounded">monitoring</span>
       </button>
-      <button class="btn-icon accent" on:click={openBodyStats} aria-label={$_('diary.actions.body_stats')} title={$_('diary.actions.body_stats_long')}>
+      {#if !$externalBodyMode}<button class="btn-icon accent" on:click={openBodyStats} aria-label={$_('diary.actions.body_stats')} title={$_('diary.actions.body_stats_long')}>
         <span class="material-symbols-rounded">scale</span>
-      </button>
+      </button>{/if}
     {/if}
   </div>
 
@@ -3113,7 +3116,7 @@
 {/if}
 
 <!-- Body Stats Sheet -->
-{#if $diaryShowBodyStats}
+{#if !$externalBodyMode && $diaryShowBodyStats}
   <div use:portal class="sheet-backdrop" role="dialog" aria-modal="true"
     on:click={() => { if (!_sheetLock) diaryShowBodyStats.set(false); }} use:closeOnBack={() => diaryShowBodyStats.set(false)} on:keydown={() => {}}>
     <div class="bs-sheet" on:click|stopPropagation on:keydown={() => {}}>

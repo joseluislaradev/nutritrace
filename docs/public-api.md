@@ -118,3 +118,10 @@ curl -H "Authorization: Bearer nt_pat_..." \
 curl -H "Authorization: Bearer nt_pat_..." \
   https://your-nutritrace.example.com/api/v1/profile
 ```
+
+
+## Extensión privada OAuth del fork
+
+OAuth se admite **exclusivamente en `/api/mcp`**. REST `/api/v1` conserva PAT y sus gates/scopes. No compartir JWT de sesión, credenciales Google o PAT entre servicios. La extensión y las herramientas nutricionales se describen en [chatgpt-mcp.md](chatgpt-mcp.md).
+
+`BODY_MEASUREMENTS_SOURCE=gym-log` bloquea endpoints de escritura corporal y tools MCP para ambos tipos de credencial. Las cargas mixtas de diario/importación/sync conservan nutrición y cuerpo legado; informan conflictos corporales que el cliente debe exportar/resolver. Ver [modo personal](PERSONAL_NUTRITION.md). Este comportamiento es intencional; no es una credencial PAT inválida ni autorización para reintentar por otra ruta.

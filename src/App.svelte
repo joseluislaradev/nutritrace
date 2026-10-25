@@ -1,4 +1,5 @@
 <script>
+  import { applyBodySource, loadBodyConflicts, bodyConflicts, exportBodyConflicts, dismissBodyConflicts } from './lib/body-source.js';
   import { onMount }   from 'svelte';
   import { fade, slide } from 'svelte/transition';
   import { portal } from './lib/portal.js';
@@ -557,7 +558,7 @@
     // can sign in (lib/editor-draft.js).
     try { (await import('./lib/editor-draft.js')).migrateUnscopedDrafts(); } catch {}
     // Load auth state first (sets $currentUser and $userMgmtActive)
-    try { await loadAuthState(); } finally { authLoaded = true; }
+    try { await loadAuthState(); await loadEnvLocks(); } finally { authLoaded = true; }
 
     // Mirror serverUrl + authToken from localStorage into the native SQLite
     // sync_meta table so the Kotlin HealthConnectSyncWorker (background HC
@@ -764,6 +765,7 @@
    * left Trace looking unconfigured even with AI_* set on the server.
    */
   async function loadEnvLocks() {
+    try { const r = await fetch(apiUrl('/api/app-config/capabilities'), {credentials:'include'}); if (r.ok) applyBodySource((await r.json()).body_measurements_source); } catch {}
     if (isNative && !getServerUrl()) return;
     try {
       const headers = {};
@@ -772,8 +774,17 @@
       const res = await fetch(apiUrl('/api/app-config/env-locks'), { credentials: 'include', headers });
       if (!res.ok) return;
       const { envLocks } = await import('./stores/settings.js');
-      envLocks.set(await res.json());
+      const capabilities = await res.json();
+      applyBodySource(capabilities.body_measurements_source);
+      loadBodyConflicts();
+      envLocks.set(capabilities);
     } catch { /* defaults stay: Trace waits for a key in Settings */ }
+  }
+
+  let _conflictsFor;
+  $: if (_conflictsFor !== ($currentUser?.id ?? 'signed-out')) {
+    _conflictsFor=$currentUser?.id ?? 'signed-out';
+    loadBodyConflicts(_conflictsFor);
   }
 
   const AUTH_BYPASS = ['/forgot-password', '/reset-password', '/accept-invite'];
@@ -848,6 +859,14 @@
   on:touchend|capture={_finishPullSync}
   on:touchcancel|capture={_cancelPullSync}
 />
+
+  {#if $currentUser && $bodyConflicts.length}
+  <div role="alert" style="position:fixed;bottom:80px;left:12px;right:12px;z-index:9999;padding:12px;background:var(--bg-card,white);color:var(--text-1);border:1px solid var(--border);border-radius:12px">
+    Hay {$bodyConflicts.length} cambios corporales no aplicados. Las comidas y el agua se conservaron. Revisa estas medidas en Gym Log.
+    <button on:click={exportBodyConflicts}>Exportar medidas pendientes</button>
+    <button on:click={dismissBodyConflicts}>Ya resolví</button>
+  </div>
+{/if}
 
 <!-- Native setup gate — shown on first launch on Android/iOS -->
 {#if showNativeSetup}

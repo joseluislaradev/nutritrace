@@ -1,3 +1,4 @@
+import { externalBodyMode, bodyIsExternal } from '../lib/body-source.js';
 import { writable, get, derived } from 'svelte/store';
 import { DB } from '../lib/db.js';
 
@@ -463,6 +464,26 @@ export function reloadSettingStores({ force = false } = {}) {
 }
 
 function createSettingStore(key, defaultValue) {
+  const original = createOriginalSettingStore(key, defaultValue);
+  const projected = value => {
+    if (!bodyIsExternal()) return value;
+    if (['notifWeighIn','mirrorWellnessWeight','diaryRailShowBodyStats'].includes(key)) return false;
+    if (key==='calorieGoalMode') return 'fixed';
+    return value;
+  };
+  return {
+    subscribe(run) {
+      let current;
+      const a=original.subscribe(value => {current=value;run(projected(value));});
+      const b=externalBodyMode.subscribe(() => run(projected(current)));
+      return () => {a();b();};
+    },
+    get() { return projected(original.get()); },
+    set(value) { original.set(projected(value)); },
+    update(fn) { original.update(v => projected(fn(projected(v)))); },
+  };
+}
+function createOriginalSettingStore(key, defaultValue) {
   const store = writable(DB.getSetting(key, defaultValue));
   _settingStores.push({ key, defaultValue, store });
 

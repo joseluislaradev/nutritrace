@@ -1,3 +1,4 @@
+import { bodyIsExternal } from './body-source.js';
 /**
  * adaptive-tdee-local.js — client-side mirror of server/lib/adaptive-tdee.js.
  *
@@ -85,6 +86,7 @@ function _linReg(points) {
 }
 
 export async function computeAdaptiveTdeeLocal(opts = {}) {
+  if (bodyIsExternal()) return {ready:false,tdee:null,reason:'body_source_gym_log'};
   const windowDays = opts.windowDays || DEFAULT_WINDOW_DAYS;
   const minValid   = opts.minValidDays || MIN_VALID_DAYS;
   const startDate  = _isoDaysAgo(windowDays - 1);

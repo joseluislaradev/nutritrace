@@ -64,6 +64,8 @@ function fixture({ offline = false, useCache = true } = {}) {
   platform.setImageMap(useCache ? { [original]: cached, [base + original]: cached } : {});
   const bindings = {
     ...platform, localStorage,
+    bodyConflictStorageKey: () => 'fixture',
+    retainBodyConflicts: rows => assert.equal(rows?.length || 0, 0, "nutrition-only fixture has no body edits"),
     getServerUrl: () => base, getAuthToken: () => null, apiUrl: path => base + path,
     dbGetMeal: async () => local,
     dbUpdateMeal: async (_id, row) => {

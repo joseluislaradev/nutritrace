@@ -1,3 +1,4 @@
+import { externalBody } from './lib/body-source-policy.js';
 import nodemailer from 'nodemailer';
 import db from './db.js';
 import { logger } from './logger.js';
@@ -511,7 +512,7 @@ export async function sendWeeklySummaryEmail(userId, origin) {
       firstWeight = weightRows[0].value;
       lastWeight  = weightRows[weightRows.length - 1].value;
     }
-    const weightDiff = (firstWeight != null && lastWeight != null) ? lastWeight - firstWeight : null;
+    const weightDiff = !externalBody() && (firstWeight != null && lastWeight != null) ? lastWeight - firstWeight : null;
 
     // ── Build email ───────────────────────────────────────────────────────
     const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];

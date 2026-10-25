@@ -21,11 +21,13 @@
  * probes against a disabled endpoint can't consume the token's rate-
  * limit budget.
  */
+import { sendAuthError, McpAuthError } from '../lib/mcp/oauth-config.js';
 import { Router } from 'express';
-import { bearerAuth } from '../middleware/bearer-auth.js';
+import { mcpAuth, mcpAttemptLimit } from '../middleware/mcp-auth.js';
 import { handleMcpRequest } from '../lib/mcp/server.js';
 import { logger } from '../logger.js';
 
+export function createMcpRouter(authenticate = mcpAuth) {
 const router = Router();
 
 // Custom scope check: accept ANY of the mcp:* scopes rather than
@@ -36,14 +38,11 @@ const router = Router();
 // per-verb.
 const MCP_SCOPES = ['mcp:read', 'mcp:write', 'mcp:destroy'];
 function requireAnyMcpScope(req, res, next) {
-  if (!req.apiToken) {
+  if (!req.mcpAuth) {
     return res.status(401).json({ error: 'Token required', code: 'auth_missing' });
   }
-  if (!MCP_SCOPES.some(s => req.apiToken.scopes.includes(s))) {
-    return res.status(403).json({
-      error: `Token lacks any of ${MCP_SCOPES.join(', ')}`,
-      code: 'auth_scope',
-    });
+  if (!MCP_SCOPES.some(s => req.mcpAuth.scopes.includes(s))) {
+    return sendAuthError(res,new McpAuthError(403,'auth_scope','mcp:read'));
   }
   next();
 }
@@ -100,6 +99,14 @@ router.use((req, res, next) => {
   next();
 });
 router.use((req, res, next) => {
+  res.set('Cache-Control','no-store');
+  res.set('Vary','Origin');
+  if (req.get('origin') && _isOriginAllowed(req.get('origin'))) {
+    res.set('Access-Control-Allow-Origin', req.get('origin'));
+    res.set('Access-Control-Allow-Headers','Authorization, Content-Type, MCP-Protocol-Version, MCP-Session-Id');
+    res.set('Access-Control-Expose-Headers','WWW-Authenticate, MCP-Protocol-Version');
+    res.set('Access-Control-Allow-Methods','POST, GET, DELETE, OPTIONS');
+  }
   const origin = req.get('origin');
   if (!_isOriginAllowed(origin)) {
     return res.status(403).json({
@@ -116,6 +123,7 @@ router.use((req, res, next) => {
 // bearerAuth so a speculative client that probes those verbs can't
 // burn the token's rate-limit budget on 405s. Body is informational
 // only; no auth or scope info is leaked because none is checked.
+router.options('/', (req,res) => res.sendStatus(204));
 router.get('/', (req, res) => {
   res.status(405).json({
     jsonrpc: '2.0',
@@ -137,16 +145,16 @@ router.delete('/', (req, res) => {
   });
 });
 
-router.post('/', bearerAuth, requireAnyMcpScope, async (req, res) => {
+router.post('/', mcpAttemptLimit, authenticate, requireAnyMcpScope, async (req, res) => {
   // Stamp write / destroy eligibility onto the request for the tool
   // registrar downstream. Server flag AND matching token scope both
   // required, independently.
-  req.mcpWrites  = WRITE_ENABLED   && !!req.apiToken?.scopes?.includes('mcp:write');
-  req.mcpDestroy = DESTROY_ENABLED && !!req.apiToken?.scopes?.includes('mcp:destroy');
+  req.mcpWrites  = WRITE_ENABLED && (req.mcpAuth?.authKind === 'oauth' || req.mcpAuth?.scopes?.includes('mcp:write'));
+  req.mcpDestroy = DESTROY_ENABLED && req.mcpAuth?.authKind === 'pat' && req.mcpAuth?.scopes?.includes('mcp:destroy');
   try {
     await handleMcpRequest(req, res);
   } catch (e) {
-    logger.error('[mcp] request handler threw:', e?.message || e);
+    logger.error('[mcp] request handler failed');
     if (!res.headersSent) {
       res.status(500).json({
         jsonrpc: '2.0',
@@ -163,4 +171,6 @@ function _envFlag(v) {
   return s === '1' || s === 'true' || s === 'yes' || s === 'on';
 }
 
-export default router;
+return router;
+}
+export default createMcpRouter();

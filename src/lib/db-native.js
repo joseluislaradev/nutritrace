@@ -1,3 +1,4 @@
+import { bodyIsExternal, isBodyMetric } from './body-source.js';
 /**
  * db-native.js — SQLite database layer for the Capacitor native app.
  *
@@ -1136,7 +1137,9 @@ export async function dbGetDiaryDate(date) {
 export async function dbSaveDiaryDate(date, data) {
   const db = await getDb();
   const items      = JSON.stringify(data.items || []);
-  const body_stats = JSON.stringify(data.body_stats || {});
+  const body_stats = bodyIsExternal()
+    ? (_row(await db.query(`SELECT body_stats FROM diary WHERE date=? AND user_id=?`,[date,LOCAL_USER_ID]))?.body_stats || '{}')
+    : JSON.stringify(data.body_stats || {});
   const water      = JSON.stringify(data.water || []);
   const notes      = (typeof data.notes === 'string' && data.notes.trim()) ? data.notes : null;
   // #207: preserve completed_at and completed_meals if the caller
@@ -1391,6 +1394,7 @@ export async function dbGetWellness(startDate, endDate, source = null) {
 }
 
 export async function dbUpsertWellness(date, source, metric_type, value, metadata = {}) {
+  if (bodyIsExternal() && isBodyMetric(metric_type)) return;
   const db = await getDb();
   // CRITICAL: ON CONFLICT must reset sync_status to 'pending' so updated
   // values get re-pushed to the server. Without this, a re-read from Health

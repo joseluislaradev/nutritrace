@@ -67,8 +67,9 @@ router.post('/import', wrap((req, res) => {
   // INSERT OR REPLACE (the row is dropped and re-inserted; the default only
   // applies when the column is omitted from the column list).
   const insDiary = db.prepare(
-    `INSERT OR REPLACE INTO diary (user_id, date, items, body_stats, water, notes, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`
+    `INSERT INTO diary (user_id, date, items, body_stats, water, notes, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(user_id,date) DO UPDATE SET items=excluded.items,body_stats=excluded.body_stats,water=excluded.water,notes=excluded.notes,updated_at=excluded.updated_at`
   );
   const insActivity = db.prepare(
     `INSERT INTO activity_log (user_id, date, name, kcal, duration_min, distance, source, met, is_template, updated_at)

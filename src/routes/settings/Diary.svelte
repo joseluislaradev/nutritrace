@@ -1,4 +1,5 @@
 <script>
+  import { externalBodyMode } from '../../lib/body-source.js';
   import { _ } from 'svelte-i18n';
   import Toggle from '../../components/settings/Toggle.svelte';
   import SettingRow from '../../components/settings/SettingRow.svelte';
@@ -153,7 +154,7 @@
       <Toggle checked={$diaryRailShowWater} on:change={e => diaryRailShowWater.set(e.detail)} />
     </SettingRow>
     <SettingRow label="Body Stats" desc="Weight + measurements in one card.">
-      <Toggle checked={$diaryRailShowBodyStats} on:change={e => diaryRailShowBodyStats.set(e.detail)} />
+      <Toggle disabled={$externalBodyMode} checked={$diaryRailShowBodyStats} on:change={e => diaryRailShowBodyStats.set(e.detail)} />
     </SettingRow>
     <SettingRow label="Activity Impact" desc="Only renders when a wearable is connected.">
       <Toggle checked={$diaryRailShowActivityWidget} on:change={e => diaryRailShowActivityWidget.set(e.detail)} />

@@ -1,4 +1,5 @@
 <script>
+  import { externalBodyMode } from '../lib/body-source.js';
   import { closeOnBack } from '../lib/back-stack.js';
   import { onMount, onDestroy, tick } from 'svelte';
   import { _ } from 'svelte-i18n';
@@ -1018,7 +1019,7 @@
   // Garmin contributes to activity/sleep/heart tabs alongside Fitbit
   $: _wlTabList = [
     ...(fitbitAvailable || garminAvailable || healthConnectAvailable ? ['activity', 'sleep', 'heart'] : []),
-    ...(withingsAvailable ? ['body'] : []),
+    ...(withingsAvailable && !$externalBodyMode ? ['body'] : []),
   ];
   $: _wlActiveIdx  = Math.max(0, _wlTabList.indexOf(activeTab));
   // Pill position: measure actual tab button positions for pixel-perfect alignment
@@ -1041,8 +1042,8 @@
   // Auto-correct activeTab when an integration's availability changes
   $: if (status !== null && withingsStatus !== null && garminStatus !== null) {
     const isActivityTab = activeTab === 'activity' || activeTab === 'sleep' || activeTab === 'heart';
-    if (isActivityTab && !fitbitAvailable && !garminAvailable && !healthConnectAvailable) activeTab = withingsAvailable ? 'body' : 'activity';
-    if (activeTab === 'body' && !withingsAvailable && !healthConnectAvailable) activeTab = (fitbitAvailable || garminAvailable || healthConnectAvailable) ? 'activity' : 'body';
+    if (isActivityTab && !fitbitAvailable && !garminAvailable && !healthConnectAvailable) activeTab = withingsAvailable && !$externalBodyMode ? 'body' : 'activity';
+    if (!$externalBodyMode && activeTab === 'body' && !withingsAvailable && !healthConnectAvailable) activeTab = (fitbitAvailable || garminAvailable || healthConnectAvailable) ? 'activity' : 'body';
   }
 
   // ── Date navigation ────────────────────────────────────────────────────────
@@ -1677,9 +1678,9 @@
           </button>
         {/if}
         {#if withingsAvailable || healthConnectAvailable}
-          <button class="tab-btn" class:active={activeTab === 'body'} on:click={() => activeTab = 'body'}>
+          {#if !$externalBodyMode}<button class="tab-btn" class:active={activeTab === 'body'} on:click={() => activeTab = 'body'}>
             <span class="material-symbols-rounded tab-icon">monitor_weight</span> {$_('wellness_page.chip.body')}
-          </button>
+          </button>{/if}
         {/if}
       </div>
       </div>
@@ -2176,7 +2177,7 @@
         {/if}
 
       <!-- ── Body tab (Withings) ── -->
-      {:else if activeTab === 'body'}
+      {:else if !$externalBodyMode && activeTab === 'body'}
         {#if withingsStatus.connected || $fitbitFamilyEnabled || (isNative && _hasLocalData)}
           <div class="metric-grid">
             {#each BODY_METRICS.filter(m => isVisible(m.id)) as m}
@@ -2578,7 +2579,7 @@
                 </div>
               </div>
             {/if}
-          {:else if activeTab === 'body'}
+          {:else if !$externalBodyMode && activeTab === 'body'}
             <!-- Body Scan Scores (rail duplicate) -->
             {#if (withingsStatus.connected || $fitbitFamilyEnabled || (isNative && _hasLocalData)) && BODY_SCORE_METRICS.filter(m => isVisible(m.id)).some(m => (withingsData[m.id] ?? data[m.id]) != null)}
               <div class="wl-rail-only">

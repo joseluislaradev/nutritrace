@@ -1,4 +1,5 @@
 <script>
+  import { externalBodyMode, isBodyMetric } from '../../lib/body-source.js';
   import AttachImageButton from './AttachImageButton.svelte';
   import { closeOnBack } from '../../lib/back-stack.js';
   import { offNutritionStatus, needsFullLookup } from '../../lib/off-nutrition.js';
@@ -131,6 +132,7 @@
       const converted = {};
       for (const [date, metrics] of Object.entries(data)) {
         const m = { ...metrics };
+        if ($externalBodyMode) for (const k of Object.keys(m)) if (isBodyMetric(k)) delete m[k];
         // Distance: km → mi
         if (m.distance_km != null && distUnit === 'mi') {
           m.distance_mi = Math.round(m.distance_km * 0.621371 * 100) / 100;
@@ -192,6 +194,7 @@
           return _convertWellnessUnits(raw);
         }
         case 'get_body_composition': {
+          if ($externalBodyMode) return {error:'Consult body measurements using the Gym Log app.'};
           try {
             const data = await NtApi.get(`/api/wellness/withings/data?from=${args.from}&to=${args.to}`);
             return _convertWellnessUnits(data);
@@ -226,7 +229,7 @@
             // unit hint so the AI doesn't misread "180" as kg/cm.
             const wu = DB.getSetting('weightUnit', 'lb');
             const lu = DB.getSetting('lengthUnit', 'in');
-            const rawBs = entry?.body_stats || entry?.bodyStats || {};
+            const rawBs = $externalBodyMode ? {} : entry?.body_stats || entry?.bodyStats || {};
             const bodyStats = {};
             if (rawBs.weight != null && rawBs.weight !== '') {
               bodyStats.weight = readBodyStat(rawBs, 'weight', wu, lu);
@@ -354,7 +357,7 @@
                 sums.carbohydrates  += tot.carbohydrates  || 0;
                 sums.fat            += tot.fat            || 0;
                 sums.water_ml       += (entry.water || []).reduce((s, l) => s + (l.amount || 0), 0);
-                const bs = entry.body_stats || entry.bodyStats || {};
+                const bs = $externalBodyMode ? {} : entry.body_stats || entry.bodyStats || {};
                 // Force conversion to kg so diff arithmetic is unit-stable
                 // even when the user toggled their display unit mid-period.
                 const w  = readBodyStat(bs, 'weight', 'kg', 'in');
@@ -512,12 +515,12 @@
             if (!autoEstimate) {
               return { error: 'Auto-estimation is off. Ask the user for a calorie number, or have them enable Settings → AI Assistant → Estimate activity calories.' };
             }
-            const w = Number(DB.getSetting('weight_kg', 0));
-            const h = Number(DB.getSetting('height_cm', 0));
+            const w = $externalBodyMode ? 0 : Number(DB.getSetting('weight_kg', 0));
+            const h = $externalBodyMode ? 0 : Number(DB.getSetting('height_cm', 0));
             const dob = DB.getSetting('dob', '');
             const sex = DB.getSetting('gender', '');
             if (!w || !h || !dob || !sex) {
-              return { error: 'Cannot estimate — missing body profile fields. Ask the user to fill in weight, height, date of birth, and sex on their profile, or supply a calorie number directly.' };
+              return { error: 'Cannot estimate without a verified current body profile. Measurements belong in Gym Log when configured; supply an explicit calorie number instead.' };
             }
             // Caller (the AI) is expected to compute kcal itself given duration_min and an
             // appropriate MET, then pass it back as kcal. We refuse to log a 0 here.
@@ -1345,9 +1348,9 @@
       const a  = Math.floor(ms / (365.25 * 24 * 3600 * 1000));
       if (a > 0 && a < 130) _age = a;
     }
-    const _hCm = Number(DB.getSetting('height_cm',     null)) || null;
-    const _wKg = Number(DB.getSetting('weight_kg',     null)) || null;
-    const _tKg = Number(DB.getSetting('target_weight', null)) || null;
+    const _hCm = $externalBodyMode ? null : Number(DB.getSetting('height_cm',     null)) || null;
+    const _wKg = $externalBodyMode ? null : Number(DB.getSetting('weight_kg',     null)) || null;
+    const _tKg = $externalBodyMode ? null : Number(DB.getSetting('target_weight', null)) || null;
     const _act = DB.getSetting('activity', '') || '';
     const _wu = DB.getSetting('weightUnit', 'lb');
     const _hu = DB.getSetting('heightUnit', 'ft');
@@ -1405,7 +1408,7 @@
     }
 
     let statsText = '';
-    const bs = entry?.bodyStats || entry?.body_stats || {};
+    const bs = $externalBodyMode ? {} : entry?.bodyStats || entry?.body_stats || {};
     const _wuStat = DB.getSetting('weightUnit', 'lb');
     const _luStat = DB.getSetting('lengthUnit', 'in');
     const bsParts = [];

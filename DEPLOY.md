@@ -436,3 +436,19 @@ This works for any environment variable the server reads directly, including `TO
 ## Backup & Restore
 
 Full backups (database + uploaded images) can be created and restored from Settings → Backup & Restore. Backups are ZIP files that include all user data and can be used to migrate between servers.
+
+
+## Fork personal: Railway + ChatGPT OAuth
+
+Usar el **Dockerfile raíz de este fork**, con contexto de build en la raíz NutriTrace. Compila frontend local y copia `server/` local y módulos compartidos; no utiliza una imagen publicada de TraceApps. Los locks se instalan con `npm ci`. No usar `server/Dockerfile` aislado para esta entrega. `.dockerignore` excluye entornos, archivos SQLite/WAL, uploads, backups y claves del contexto.
+
+1. Antes de publicar, revisar el diff y ejecutar las pruebas con Node 20 y DB temporal. El binding SQLite del proyecto no se validó con Node 24. Construir local/CI con `docker build -t nutritrace-personal:review .`; esta tarea no pudo hacerlo porque Docker no está disponible en WSL. El build PWA y el arranque/pruebas Node 20 se verifican por separado.
+2. Hacer un respaldo consistente con la herramienta existente SQLite/backup (incluido WAL) y uploads. Restaurar en un entorno aislado para comprobarlo. No copiar únicamente un `.db` abierto. No dar al entorno de prueba acceso a Google/producción ni copiar credenciales a la imagen.
+3. Resolver/exportar outboxes corporales pendientes antes de activar `BODY_MEASUREMENTS_SOURCE=gym-log`. Configurar una API y cliente Auth0 separados siguiendo [chatgpt-mcp.md](docs/chatgpt-mcp.md). No cambiar Gym/Netlify.
+4. Configurar privadamente URL/resource/issuer/owner/client/user local y flags OAuth/MCP. Verificar que el volumen real contiene DB **y** uploads; persistencia no significa backup. No reemplazar el volumen al desplegar.
+5. Publicar solo el commit revisado del fork cuando el propietario autorice producción. Esta tarea no hizo commit, push, merge ni deploy. Verificar HTTPS, metadata raíz/sufijo y challenge 401 anónimo antes de instalar la conexión ChatGPT.
+6. Instalar OAuth y ensayar registro/lectura nutricional con datos/fechas acordados. Verificar en PWA, luego probar ambas apps independientemente. Las pruebas locales no demuestran configuración Auth0 ni elegibilidad real de ChatGPT.
+
+Rollback de autenticación: apagar `MCP_OAUTH_ENABLED` y reiniciar conserva PAT y PWA. Conservar `BODY_MEASUREMENTS_SOURCE=gym-log` si se requiere mantener el bloqueo corporal. Si se revierte toda la imagen a una versión sin política, volverán los formularios y escritores corporales: detener/importadores/clientes antes de hacerlo. No restaurar datos ni borrar filas para revertir código. No hay migración nueva de esquema, pero las migraciones upstream de una versión futura requieren su propia estrategia. Registrar las escrituras de pruebas manuales; corregirlas deliberadamente en su app propietaria.
+
+Revocación y corte de emisiones: ver [guía OAuth](docs/chatgpt-mcp.md). Recuperación desde backup y cambios a Auth0/Railway son pasos manuales posteriores, no operaciones realizadas por esta implementación.

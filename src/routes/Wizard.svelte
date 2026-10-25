@@ -1,4 +1,5 @@
 <script>
+  import { externalBodyMode } from '../lib/body-source.js';
   import { closeOnBack } from '../lib/back-stack.js';
   import { push } from 'svelte-spa-router';
   import { _ } from 'svelte-i18n';
@@ -51,7 +52,7 @@
   // doesn't need it — the admin's full_name was captured on the usermgmt
   // step itself.
   const BASE_STEPS = ['welcome','units','gender','dob','height','weight','target','activity','integrations','notifications','updates','summary'];
-  $: ALL_STEPS = _isNativeLocal
+  $: ORIGINAL_STEPS = _isNativeLocal
     ? ['welcome', 'name', 'units','gender','dob','height','weight','target','activity','integrations','notifications','updates','summary']
     : (enableUserMgmt
         ? ['usermgmt', ...BASE_STEPS]
@@ -228,6 +229,7 @@
   }
 
   function calcSummary() {
+    if ($externalBodyMode) { tdee=0; return; }
     const ageMs = Date.now() - new Date(dob).getTime();
     const age   = Math.floor(ageMs / (365.25 * 24 * 3600 * 1000));
     const wKg   = toKg(weight);
@@ -251,6 +253,7 @@
     waterGoal = Math.round((baseWater + actBonus) / 50) * 50; // round to nearest 50ml
   }
 
+  $: ALL_STEPS = $externalBodyMode ? ORIGINAL_STEPS.filter(s => !['height','weight','target'].includes(s)) : ORIGINAL_STEPS;
   $: currentStepName = ALL_STEPS[step];
 
   // Validation per step
@@ -444,6 +447,7 @@
       // — the migration in settings.js handles that path.
       bannerStyle: 'gradient',
     };
+    if ($externalBodyMode) { for (const k of ['height_cm','weight_kg','target_weight','tdee']) delete batch[k]; batch.calorieGoalMode='fixed'; }
     if (waterGoal) batch.waterGoalMl = waterGoal;
     // Save the localUserName setting whenever the 'name' step appeared in
     // the flow — covers both native standalone and PWA single-user. Multi-
@@ -961,6 +965,11 @@
         <p class="step-desc">{$_('wizard.summary.desc')}</p>
         {@const _goalFactor = goalKcal === tdee ? 1.0 : goalKcal < tdee ? 0.8 : 1.2}
         {@const _factorLabel = _goalFactor === 0.8 ? 'Lose −20%' : _goalFactor === 1.2 ? 'Gain +20%' : 'Maintain'}
+        {#if $externalBodyMode}
+          <div class="card"><p>Peso y medidas se registran en Gym Log. Define metas nutricionales explícitas; no calculamos TDEE sin datos actuales.</p>
+          <label>Calorías diarias (kcal, opcional)<input type="number" min="1" max="20000" bind:value={goalKcal} /></label>
+          <label>Agua diaria (ml, opcional)<input type="number" min="1" max="10000" bind:value={waterGoal} /></label></div>
+        {:else}
         <div class="summary-card">
           <div class="tdee-row">
             <div class="tdee-label">{$_('wizard_deep.starting_tdee')}</div>
@@ -997,6 +1006,7 @@
         </div>
       {/if}
 
+      {/if}
     </div>
   {/key}
 

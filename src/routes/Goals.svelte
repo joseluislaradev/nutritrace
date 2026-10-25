@@ -1,4 +1,5 @@
 <script>
+  import { externalBodyMode, isBodyMetric } from '../lib/body-source.js';
   import { closeOnBack } from '../lib/back-stack.js';
   import { onMount, tick } from 'svelte';
   import { slide } from 'svelte/transition';
@@ -40,7 +41,7 @@
   $: wUnit = $weightUnit || 'kg';
   $: hUnit = $heightUnit || 'cm';
   $: lUnit = $lengthUnit || 'in';
-  $: bodyStatsWithUnit = BODY_STATS.map(s => ({
+  $: bodyStatsWithUnit = ($externalBodyMode ? [] : BODY_STATS).map(s => ({
     ...s,
     unit: s.unit || (s.id === 'weight' ? wUnit : lUnit)
   }));
@@ -72,7 +73,7 @@
   ];
 
   // All fields for goal-setting: all body stats + all nutrients + wellness if enabled
-  $: wellnessFields = $wellnessEnabled ? WELLNESS_GOALS : [];
+  $: wellnessFields = $wellnessEnabled ? WELLNESS_GOALS.filter(s => !$externalBodyMode || !isBodyMetric(s.id)) : [];
   $: allFields = [...bodyStatsWithUnit, ...allNutrients, ...wellnessFields];
   // Your Goals: categorized
   $: configuredBodyStats = bodyStatsWithUnit.filter(s => $goals[s.id]);
@@ -278,7 +279,7 @@
     }
     // Adaptive TDEE — fetch even when not the active mode so the readiness
     // card shows progress while a user is building up data toward enabling it.
-    NtApi.get('/api/goals/adaptive-tdee')
+    ($externalBodyMode ? Promise.resolve({ready:false}) : NtApi.get('/api/goals/adaptive-tdee'))
       .then(r => { _adaptive = r; _adaptiveLoaded = true; })
       .catch(() => { _adaptive = null; _adaptiveLoaded = true; });
   });
@@ -735,7 +736,7 @@
           title={!_hasWearable ? 'Connect a wearable in Wellness first' : ''}
           on:click={() => _hasWearable && calorieGoalMode.set('dynamic')}>{$_('settings_goals.mode_dynamic')}</button>
         <button class="seg-opt" class:seg-active={$calorieGoalMode === 'adaptive'}
-          on:click={() => calorieGoalMode.set('adaptive')}>{$_('settings_goals.mode_adaptive')}</button>
+          on:click={() => !$externalBodyMode && calorieGoalMode.set('adaptive')}>{$_('settings_goals.mode_adaptive')}</button>
       </div>
       {#if $calorieGoalMode === 'dynamic' || $calorieGoalMode === 'adaptive'}
         <div class="goals-rail-heading" style="margin-top:12px">{$_('settings_goals.goal_factor')}</div>

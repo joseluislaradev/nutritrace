@@ -225,9 +225,10 @@ test("settings still coming down for the last account write nothing into the nex
 });
 
 async function account(name, admin) {
-  const r = await fetch(base + '/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(admin ? { Authorization: `Bearer ${admin}` } : {}) }, body: JSON.stringify({ username: name, password: 'Str0ng-Pass-77!x' }) });
+  // Use the same stale-keepalive protection as the other fixture HTTP calls.
+  const registered = await http(admin, 'POST', '/api/auth/register', { username: name, password: 'Str0ng-Pass-77!x' });
   if (!admin) return (await http(null, 'POST', '/api/auth/login', { username: name, password: 'Str0ng-Pass-77!x' })).token;
-  const { user } = await r.json();
+  const { user } = registered;
   const jwt = createRequire(new URL('../server/package.json', import.meta.url))('jsonwebtoken');
   return jwt.sign({ id: user.id, username: user.username, role: user.role, csrf: 'test' }, JWT_SECRET, { expiresIn: '1h' });
 }

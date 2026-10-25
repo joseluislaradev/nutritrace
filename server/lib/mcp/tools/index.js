@@ -1,3 +1,4 @@
+import { registerSetNutritionGoals } from './set-nutrition-goals.js';
 /**
  * MCP tool registrar. Called once per request when the McpServer is
  * built. Each tool is registered against the user identified by
@@ -53,6 +54,7 @@ export function registerWriteTools(server, ctx) {
   registerLogWater(server, ctx);
   registerLogMeal(server, ctx);
   registerLogBodyStat(server, ctx);
+  registerSetNutritionGoals(server, ctx);
 }
 
 export function registerDestroyTools(server, ctx) {

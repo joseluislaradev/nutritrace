@@ -6,7 +6,7 @@ COPY package*.json ./
 # must exist before npm install runs. Copy it explicitly here so we don't
 # bust the rest of the source-code Docker layer cache on every change.
 COPY scripts/ ./scripts/
-RUN npm install
+RUN npm ci
 COPY . .
 RUN npm run build
 
@@ -27,7 +27,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY server/package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 COPY server/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 COPY server/ .

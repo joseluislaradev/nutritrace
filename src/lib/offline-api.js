@@ -1,3 +1,4 @@
+import { retainBodyConflicts, bodyConflictStorageKey } from './body-source.js';
 /**
  * offline-api.js: the browser's API layer, able to work without a connection.
  *
@@ -358,6 +359,7 @@ async function _send(method, path, body) {
     const verb = { PUT: 'put', POST: 'post', PATCH: 'patch', DELETE: 'del' }[method] || 'post';
     return verb === 'del' ? _http.del(path) : _http[verb](path, body);
   }
+  const bodyConflictScope=bodyConflictStorageKey();
   const res = await fetch(path, {
     method,
     credentials: 'include',
@@ -365,7 +367,9 @@ async function _send(method, path, body) {
     body: body == null ? undefined : JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
+  const answer=await res.json();
+  retainBodyConflicts(answer?.body_conflicts,bodyConflictScope);
+  return answer;
 }
 
 /**
@@ -385,6 +389,7 @@ function _headers() {
 
 async function _post(path, body) {
   if (_http) return _http.post(path, body);
+  const bodyConflictScope=bodyConflictStorageKey();
   const res = await fetch(path, {
     method: 'POST',
     credentials: 'include',
@@ -392,7 +397,9 @@ async function _post(path, body) {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
+  const answer=await res.json();
+  retainBodyConflicts(answer?.body_conflicts,bodyConflictScope);
+  return answer;
 }
 
 function _scheduleFlush(ms = 0) {

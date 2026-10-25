@@ -1,3 +1,4 @@
+import { retainBodyConflicts, bodyConflictStorageKey } from './body-source.js';
 /**
  * api.js - External API calls (Open Food Facts)
  */
@@ -862,6 +863,7 @@ const _NtApiHttp = {
   // Core fetch — apiUrl() handles the server URL prefix (native server mode)
   // or the BASE_URL prefix (PWA at a subpath) consistently for every call.
   async _fetch(method, path, body, isUpload = false) {
+    const bodyConflictScope=bodyConflictStorageKey();
     const headers = {};
     if (!isUpload) headers['Content-Type'] = 'application/json';
 
@@ -885,7 +887,9 @@ const _NtApiHttp = {
       body: isUpload ? body : body != null ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `API error ${res.status}`); }
-    return res.json();
+    const answer=await res.json();
+    retainBodyConflicts(answer?.body_conflicts,bodyConflictScope);
+    return answer;
   },
 
   get(path)           { return this._fetch('GET',    path); },

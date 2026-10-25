@@ -1,3 +1,4 @@
+import { requireInternalBody } from '../lib/body-source.js';
 import { writable, derived } from 'svelte/store';
 import { NtApi } from '../lib/api.js';
 import { Nutrition } from '../lib/nutrition.js';
@@ -768,6 +769,7 @@ export async function saveDiaryNote(notes) {
 }
 
 export async function saveBodyStats(stats) {
+  requireInternalBody();
   let viewDate = null;
   currentDate.subscribe(v => viewDate = v)();
   if (!viewDate) return;

@@ -8,3 +8,15 @@ android
 *.apk
 *.aab
 *.keystore
+
+# Never bake local health data, backups or credentials into the fork image.
+**/.env*
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite-*
+**/*.sqlite3
+**/uploads
+**/backups
+**/*.pem
+**/*.key

@@ -1,4 +1,5 @@
 <script>
+  import { externalBodyMode } from '../../lib/body-source.js';
   import { createEventDispatcher, tick } from 'svelte';
   import { _ } from 'svelte-i18n';
   import Sheet from '../ui/Sheet.svelte';
@@ -65,7 +66,7 @@
       // source has the most recent date. Any fetch failure silently keeps
       // the synchronous seed — never worse than before.
       try {
-        const raw = DB.getSetting('weight_kg', null);
+        const raw = $externalBodyMode ? null : DB.getSetting('weight_kg', null);
         userWeightKg = raw != null && !isNaN(Number(raw)) ? Number(raw) : null;
       } catch { userWeightKg = null; }
       Promise.all([
@@ -140,7 +141,7 @@
   // user hasn't manually overridden kcal, auto-fill so the form is one tap
   // from save. When they type over it, userKcalOverridden latches to true
   // and the preview becomes read-only guidance below the field.
-  $: previewKcal = metKcal({ met, weightKg: userWeightKg, durationMin });
+  $: previewKcal = $externalBodyMode ? null : metKcal({ met, weightKg: userWeightKg, durationMin });
   $: {
     if (previewKcal != null && !userKcalOverridden) {
       const shown = $energyUnit === 'kJ' ? Math.round(previewKcal * 4.184) : previewKcal;

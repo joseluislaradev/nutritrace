@@ -1,4 +1,5 @@
 <script>
+  import { externalBodyMode } from '../../lib/body-source.js';
   import { slide } from 'svelte/transition';
   import { _ } from 'svelte-i18n';
   import Toggle from './Toggle.svelte';
@@ -109,6 +110,7 @@
   }
 
   async function _scheduleWeighIn() {
+    if ($externalBodyMode) { const {cancelWeighInReminder}=await import('../../lib/notifications.js'); await cancelWeighInReminder(); return; }
     if (_notifWeighIn) {
       const { requestPermission, scheduleWeighInReminder } = await import('../../lib/notifications.js');
       await requestPermission();
@@ -289,6 +291,7 @@
         {/each}
       {/if}
       <div class="setting-divider"></div>
+      {#if !$externalBodyMode}
       <div class="setting-row">
         <div>
           <span class="setting-label">{$_('settings_notifications.reminders.weighin')}</span>
@@ -302,6 +305,7 @@
           <span class="setting-label">{$_('settings_notifications.reminders.weighin_time')}</span>
           <TimePicker value={_notifWeighInTime} on:change={e => { _notifWeighInTime = e.detail; set('notifWeighInTime', e.detail); _scheduleWeighIn(); }} />
         </div>
+      {/if}
       {/if}
       <div class="setting-divider"></div>
       <div class="setting-row">

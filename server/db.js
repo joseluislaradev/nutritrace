@@ -1,3 +1,4 @@
+import { installBodySourceGuards } from './lib/body-source-policy.js';
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
@@ -1192,5 +1193,7 @@ try {
 } catch (e) {
   console.warn('[db] foods nutriment key canonicalization failed:', e?.message || e);
 }
+
+installBodySourceGuards(db);
 
 export default db;

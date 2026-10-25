@@ -1,3 +1,4 @@
+import { externalBody } from './body-source-policy.js';
 /**
  * scheduler.js — Server-side scheduled tasks
  *
@@ -396,7 +397,7 @@ async function _pushReminders(userId) {
   }
 
   // Weigh-in reminder — skip if already weighed in today (diary.body_stats OR wellness_data)
-  if (_isEnabled(userId, 'notifWeighIn')) {
+  if (!externalBody() && _isEnabled(userId, 'notifWeighIn')) {
     const time = _getUserSetting(userId, 'notifWeighInTime') || '07:00';
     const [th, tm] = time.split(':').map(Number);
     const targetMin = th * 60 + tm;

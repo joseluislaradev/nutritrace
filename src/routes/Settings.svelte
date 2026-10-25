@@ -6,6 +6,7 @@
 </script>
 
 <script>
+  import { externalBodyMode } from '../lib/body-source.js';
   // Thin router shell. All 25 (26 counting About) section bodies live in
   // routes/settings/*.svelte and are dispatched to via svelte:component
   // when the URL is /settings/<slug>. The /settings index just renders
@@ -558,7 +559,7 @@
     <span>{$_('settings.goals.section')}</span>
     <span class="material-symbols-rounded chevron">expand_more</span>
   </button>
-  <button class="section-toggle" class:hidden={!sectionVisible(settingsQuery, 'bodyStats')} class:active={currentSection === 'bodyStats'} aria-current={currentSection === 'bodyStats' ? 'page' : undefined} on:click={() => toggleSection('bodyStats')}>
+  <button class="section-toggle" class:hidden={$externalBodyMode || !sectionVisible(settingsQuery, 'bodyStats')} class:active={currentSection === 'bodyStats'} aria-current={currentSection === 'bodyStats' ? 'page' : undefined} on:click={() => !$externalBodyMode && toggleSection('bodyStats')}>
     <span class="material-symbols-rounded si">straighten</span>
     <span>{$_('settings.body_stats.section')}</span>
     <span class="material-symbols-rounded chevron">expand_more</span>

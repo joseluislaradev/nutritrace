@@ -1,3 +1,4 @@
+import { bodyIsExternal } from './body-source.js';
 /**
  * notifications.js — Local notification scheduling for NutriTrace
  *
@@ -521,6 +522,7 @@ export async function testGotify(url, token) {
 // ── Weigh-in reminder scheduling ────────────────────────────────────────────
 
 export async function scheduleWeighInReminder(timeStr = '07:00') {
+  if (bodyIsExternal()) { await cancelWeighInReminder(); return; }
   if (!isNative) return;
   if (_USE_NATIVE_WORKER) { await cancelWeighInReminder(); return; }
   const LN = _getLN();

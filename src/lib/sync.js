@@ -1,3 +1,4 @@
+import { retainBodyConflicts, bodyConflictStorageKey } from './body-source.js';
 /**
  * sync.js — Differential sync engine for the Android app.
  *
@@ -286,6 +287,7 @@ async function _sendCompletionOps(token, signal, gen) {
 
 /** Push local pending changes to the server. Returns true if anything was pushed. */
 async function pushChanges({ token = getAuthToken(), signal = null, gen = accountGeneration() } = {}) {
+  const bodyConflictScope=bodyConflictStorageKey();
   // False once another account's sign-in has begun (lib/local-account.js
   // accountGeneration): nothing more is written for this push after that.
   const live = () => gen === accountGeneration();
@@ -506,6 +508,7 @@ async function pushChanges({ token = getAuthToken(), signal = null, gen = accoun
     throw new Error(`Push failed: ${res.status}`);
   }
   const result = await res.json();
+  retainBodyConflicts(result?.body_conflicts,bodyConflictScope);
   _learnClock(result.server_time, sentAt, 'push');
   // Another account's sign-in finished while this was out and the phone's
   // copy is theirs now: these ids and marks belong to rows that are gone.

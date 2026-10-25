@@ -1,3 +1,4 @@
+import { externalBody } from './body-source-policy.js';
 /**
  * adaptive-tdee.js — learn the user's true TDEE from weight trend × intake.
  *
@@ -106,6 +107,7 @@ function _linReg(points) {
  * }}
  */
 export function computeAdaptiveTdee(userId, opts = {}) {
+  if (externalBody()) return {ready:false,tdee:null,reason:'body_source_gym_log'};
   const windowDays = opts.windowDays || DEFAULT_WINDOW_DAYS;
   const minValid   = opts.minValidDays || MIN_VALID_DAYS;
   const startDate  = _isoDaysAgo(windowDays - 1);

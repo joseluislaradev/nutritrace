@@ -1,4 +1,5 @@
 <script>
+  import { externalBodyMode } from '../../lib/body-source.js';
   import { DB } from '../../lib/db.js';
   import Toggle from '../../components/settings/Toggle.svelte';
   import { bodyStatsOrder, hiddenBodyStats } from '../../stores/settings.js';
@@ -77,6 +78,8 @@
     return 0;
   }
 </script>
+{#if $externalBodyMode}<p>Peso y medidas se gestionan exclusivamente en Gym Log.</p>{:else}
+
 
 <div class="section-body">
   <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -102,3 +105,5 @@
     {/each}
   </div>
 </div>
+
+{/if}

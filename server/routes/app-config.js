@@ -1,3 +1,4 @@
+import { bodySource } from '../lib/body-source-policy.js';
 import { Router } from 'express';
 import { linkBase } from '../lib/public-url.js';
 import db from '../db.js';
@@ -7,6 +8,7 @@ import { testSmtp, isSmtpEnvLocked } from '../email.js';
 import { isAiEnvLocked } from '../ai.js';
 
 const router = Router();
+router.get('/capabilities', (req,res) => res.set('Cache-Control','no-store').json({body_measurements_source:bodySource()}));
 
 const ALLOWED_KEYS = new Set([
   'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_user', 'smtp_pass', 'smtp_from',
@@ -73,6 +75,7 @@ router.get('/env-locks', requireAuth, wrap(async (req, res) => {
   const { isBackupEnvLocked } = await import('./full-backup.js').catch(() => ({}));
   const backup_locked = typeof isBackupEnvLocked === 'function' ? isBackupEnvLocked() : false;
   res.json({
+    body_measurements_source: bodySource(),
     smtp: isSmtpEnvLocked(),
     ai: aiLocked,
     ai_enabled,

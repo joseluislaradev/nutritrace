@@ -29,6 +29,7 @@ const TOKEN_BYTES = 32;  // 256-bit secret
  * is a bug the wiring test catches on load.
  */
 export const SCOPE_DESCRIPTIONS = {
+  'mcp:goals:write': 'Explicitly change daily nutritional targets (also requires mcp:write).',
   'read:foods':      "Read the token owner's foods library. Used by CookTrace federation.",
   'write:workouts':  "Post workouts into the token owner's wellness history. Used by LiftTrace federation.",
   'write:activity':  "Log manual activity entries into the diary Activity section. Used by external trackers and headless integrations (issue #154).",
@@ -63,6 +64,7 @@ export const KNOWN_SCOPES = new Set([
   // Desktop / Cursor / Codex / etc.) inspect their diary, goals, and
   // food catalog through the MCP standard interface.
   'mcp:read',
+  'mcp:goals:write',
   // mcp:write unlocks Model Context Protocol WRITE tools (Phase 2:
   // log_food, log_water, log_meal, log_body_stat). Independent of
   // mcp:read but tokens typically hold both. The write tools rely on
@@ -98,6 +100,11 @@ function _generateRaw() {
  * the user once and never logging it.
  */
 export function createToken({ userId, name, scopes, expiresAt = null }) {
+  if (expiresAt != null) {
+    const n = Date.parse(/Z$|[+-]\d\d:\d\d$/.test(expiresAt) ? expiresAt : expiresAt + 'Z');
+    if (!Number.isFinite(n) || n <= Date.now()) throw new Error('expiresAt must be a valid future timestamp');
+    expiresAt = new Date(n).toISOString().replace('T',' ').replace(/\.\d{3}Z$/, '');
+  }
   if (!userId) throw new Error('userId required');
   const trimmedName = String(name || '').trim().slice(0, 80);
   if (!trimmedName) throw new Error('name required');
@@ -160,7 +167,7 @@ export function lookupRawToken(raw) {
   // Expiry check
   if (row.expires_at) {
     const expiresMs = new Date(row.expires_at + 'Z').getTime();
-    if (Number.isFinite(expiresMs) && expiresMs < Date.now()) return null;
+    if (!Number.isFinite(expiresMs) || expiresMs <= Date.now()) return null;
   }
 
   // Touch last_used_at (best-effort; not in a transaction with the read)

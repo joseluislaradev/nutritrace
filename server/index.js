@@ -6,6 +6,10 @@ import { rememberAdminOrigin } from './lib/public-url.js';
 // are set. No-op when unset. Must import right after dotenv/config
 // so any downstream module-init outbound fetch already sees it.
 import './lib/proxy-agent.js';
+import { metadataRouter } from './routes/mcp-metadata.js';
+import { externalBody } from './lib/body-source-policy.js';
+import { bodyWritePolicy } from './middleware/body-write-policy.js';
+
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import path from 'path';
@@ -185,6 +189,7 @@ router.use((req, res, next) => {
   if (req.user?.role === 'admin') rememberAdminOrigin(req);
   next();
 });
+router.use(bodyWritePolicy);
 router.use(csrfProtect);   // CSRF protection for cookie-based sessions
 // Optional body summaries are captured only from parsed, access-checked requests.
 router.use(captureRequestTraceBody);
@@ -210,7 +215,7 @@ router.get('/api/oidc/callback', (req, res) => {
 // part 2 — rc.30's fix only addressed the wizard redirect; this gate was
 // still returning 503 on every data call.
 router.use('/api', (req, res, next) => {
-  if (req.path.startsWith('/auth')) return next(); // allow auth routes (status, register, login)
+  if (req.path.startsWith('/auth') || req.path === '/app-config/capabilities') return next(); // allow auth routes (status, register, login)
   if (userMgmtActive()) return next();             // users exist — normal operation
   const singleUser = db.prepare(`SELECT value FROM app_config WHERE key = 'single_user_mode'`).get()?.value === '1';
   if (singleUser) return next();                   // intentional single-user mode — let data APIs through
@@ -350,6 +355,7 @@ router.use('/api/sync',             syncRoutes);
 router.get('/api/goals/adaptive-tdee', async (req, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (externalBody()) return res.json({ready:false,tdee:null,reason:'body_source_gym_log'});
   try {
     const { computeAdaptiveTdee } = await import('./lib/adaptive-tdee.js');
     const result = computeAdaptiveTdee(userId);
@@ -404,6 +410,7 @@ router.get('/{*splat}', (req, res) => {
 });
 
 // Mount the router at BASE_URL (or root if unset).
+app.use(metadataRouter);
 app.use(BASE_URL || '/', router);
 
 // ── Global error handler ───────────────────────────────────────────────────

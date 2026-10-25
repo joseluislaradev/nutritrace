@@ -1,3 +1,4 @@
+import { requireInternalBody } from '../../body-source-policy.js';
 /**
  * MCP tool: log_body_stat (Phase 2, write)
  *
@@ -53,6 +54,7 @@ const ALLOWED_STATS = new Set(Object.keys(STAT_RANGES));
  * an untagged legacy row, or a tombstoned day.
  */
 export function logBodyStatCore(userId, { stats, date } = {}) {
+  requireInternalBody();
   const day = date || todayLocal();
   if (!isCalendarDate(day)) throw new Error(`Invalid date '${day}'; expected YYYY-MM-DD.`);
 
