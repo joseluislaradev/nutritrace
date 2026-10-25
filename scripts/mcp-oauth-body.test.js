@@ -30,7 +30,7 @@ const keys=createLocalJWKSet({keys:[jwk]});
 const config=()=>oauthConfig();
 const token=async(overrides={})=>{
  const now=Math.floor(Date.now()/1000);
- return new SignJWT({iss:config().issuer,aud:config().resource,sub:'owner',azp:'chat-client',iat:now,exp:now+300,scope:'mcp:read mcp:write mcp:goals:write',...overrides}).setProtectedHeader({alg:'RS256',kid:'test'}).sign(privateKey);
+ return new SignJWT({iss:config().issuer,aud:config().resource,sub:'owner',azp:'chat-client',iat:now,exp:now+300,scope:'mcp:read mcp:write mcp:goals:write mcp:destroy',...overrides}).setProtectedHeader({alg:'RS256',kid:'test'}).sign(privateKey);
 };
 const app=express();app.use(express.json());app.use(metadataRouter);app.use(bodyWritePolicy);
 const {createMcpRouter}=await import('../server/routes/mcp.js');
@@ -69,8 +69,8 @@ test('HTTP unauthenticated challenge; real SDK initialize/list/call and body exc
  const jwt=await token();const init=await rpc(jwt,'initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'test',version:'1'}});assert.equal(init.data.result.serverInfo.name,'nutritrace');
  const listed=await rpc(jwt,'tools/list');const names=listed.data.result.tools.map(t=>t.name);
  const descriptor=listed.data.result.tools.find(t=>t.name==='get_goals');assert.equal(descriptor.annotations.readOnlyHint,true);assert.deepEqual(descriptor._meta.securitySchemes,[{type:'oauth2',scopes:['mcp:read']}]);
- for(const n of ['log_body_stat','get_body_composition','create_food','edit_diary_entry','delete_diary_entry'])assert(!names.includes(n));
- for(const n of ['get_goals','log_food','log_water','log_meal','set_nutrition_goals'])assert(names.includes(n));
+ for(const n of ['log_body_stat','get_body_composition'])assert(!names.includes(n));
+ for(const n of ['get_goals','log_food','log_water','log_meal','set_nutrition_goals','create_food','edit_diary_entry','delete_diary_entry'])assert(names.includes(n));
  const direct=await rpc(jwt,'tools/call',{name:'log_body_stat',arguments:{}});assert(direct.data.error||direct.data.result?.isError);
 });
 test('OAuth read-only denies direct writes; actual food, meal, water registration and readback',async()=>{

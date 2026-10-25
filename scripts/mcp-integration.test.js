@@ -16,6 +16,7 @@ import test, { after, before } from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { itemsRevision } from '../server/lib/mcp/_entry-target.js';
 
 const TMP_DB = path.join(os.tmpdir(), `mcp-integration-${process.pid}-${Date.now()}.db`);
 process.env.DB_PATH = TMP_DB;
@@ -327,7 +328,7 @@ test('delete_diary_entry removes an item and returns the removed shape', async (
   const day = new Date().toLocaleDateString('sv-SE');
   const before = JSON.parse(db.prepare(`SELECT items FROM diary WHERE user_id = ? AND date = ?`).get(userId, day).items);
   assert.ok(before.length > 0);
-  const r = await server.call('delete_diary_entry', { entry_index: 0, confirm: true });
+  const r = await server.call('delete_diary_entry', { entry_index: 0, expected_revision: itemsRevision(before), confirm: true });
   assert.equal(_json(r).ok, true);
   assert.equal(_json(r).removed.name, before[0].name);
   const after = JSON.parse(db.prepare(`SELECT items FROM diary WHERE user_id = ? AND date = ?`).get(userId, day).items);
@@ -342,6 +343,7 @@ test('edit_diary_entry patches quantity + rescales nutrition on portion patch', 
   const idx = items.length - 1;
   const r = await server.call('edit_diary_entry', {
     entry_index: idx,
+    expected_revision: itemsRevision(items),
     patch: { portion: 20 },   // half of the food's 40g baseline
     confirm: true,
   });

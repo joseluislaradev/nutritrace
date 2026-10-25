@@ -11,7 +11,7 @@ Todos los valores se provisionan mediante el gestor privado de Railway. El front
 | `BODY_MEASUREMENTS_SOURCE` | `internal` por defecto; `gym-log` para esta instalación personal |
 | `MCP_ENABLED` | `1` para el transporte MCP, independiente de REST público |
 | `MCP_WRITE_ENABLED` | `1` para registros nutricionales y metas con scopes apropiados |
-| `MCP_DESTROY_ENABLED` | Mantener `0`; OAuth nunca publica las herramientas destroy |
+| `MCP_DESTROY_ENABLED` | `1` para crear alimentos y editar/eliminar una entrada nutricional con `mcp:destroy`; `0` las desactiva para OAuth y PAT |
 | `MCP_OAUTH_ENABLED` | `1` activa OAuth, `0` mantiene PAT sin OAuth |
 | `MCP_OAUTH_RESOURCE_URL` | HTTPS canónico completo de `/api/mcp`, incluyendo BASE_URL |
 | `MCP_OAUTH_ISSUER` | Issuer HTTPS exacto del proveedor, terminado en `/` |
@@ -31,7 +31,7 @@ Discovery público: `/.well-known/oauth-protected-resource` y `/.well-known/oaut
 
 1. Reutilizar el tenant que ya usa Gym, sin cambiar su API, cliente ni toggles globales automáticamente.
 2. Crear una API **NutriTrace** cuyo identifier/audience sea exactamente `MCP_OAUTH_RESOURCE_URL`. Usar RS256 y access tokens cortos (propuesta: 300 segundos).
-3. Definir `mcp:read`, `mcp:write` y `mcp:goals:write`; asignarlos solo al propietario. La aplicación exige el scope del grant; si existe `permissions`, lo usa como límite adicional, nunca como unión que amplíe el consentimiento.
+3. Definir `mcp:read`, `mcp:write`, `mcp:goals:write` y **`mcp:destroy`**; asignarlos solo al propietario. La aplicación exige el scope del grant; si existe `permissions`, lo usa como límite adicional, nunca como unión que amplíe el consentimiento.
 4. Crear un cliente **ChatGPT NutriTrace** separado: Authorization Code con PKCE S256. Configurar renovación mediante refresh token con rotación, límites de duración y offline access según permita el tenant/cliente. No pedir grants de máquina para suplantar al propietario.
 5. Comprobar discovery del authorization server, JWKS y compatibilidad del parámetro `resource` con la audience. No modificar ajustes globales que afecten Gym sin revisar el efecto. NutriTrace solo obtiene JWKS del discovery del issuer configurado, por HTTPS y en su mismo origen; no sigue `jku` del JWT.
 6. Registrar la redirect URI **exacta que muestre ChatGPT**, sin inventar ni reutilizar por memoria una callback antigua. Mantener permitida solo la identidad del dueño. Comprobar `sub`, cliente, audience y permisos en el entorno del proveedor, sin copiar tokens a documentación o logs.
@@ -41,11 +41,28 @@ Referencia del proveedor: [compatibilidad resource/issuer](https://auth0.com/ai/
 
 ## Permisos y herramientas
 
-En modo Gym, ChatGPT puede consultar biblioteca, comidas, diario, totales, perfil nutricional y metas. Se reutilizan `log_food`, `log_meal` y `log_water`. Los alimentos deben existir en catálogo; `log_meal` registra comidas guardadas, no recetas de la biblioteca como si fueran comidas. Para recetas y nuevos productos, usar los flujos originales de la PWA. No reconstruir recetas ni alterar las guardadas por registrar un snack.
+En modo Gym, ChatGPT puede consultar biblioteca, comidas, diario, totales, perfil nutricional y metas. Se reutilizan `log_food`, `log_meal` y `log_water`. Para registrar, los alimentos deben existir en catálogo; `create_food` permite crear uno con confirmación y permiso adicional; `log_meal` registra comidas guardadas, no recetas de la biblioteca como si fueran comidas. Para recetas, usar los flujos originales de la PWA; los nuevos productos también pueden crearse mediante MCP. No reconstruir recetas ni alterar las guardadas por registrar un snack.
 
-No se publica ni ejecuta `log_body_stat` o `get_body_composition` en modo Gym. No hay `get_body_stats` nuevo. El registro corporal corresponde a `log_body_measurement` de Gym. OAuth nunca concede `create_food`, `edit_diary_entry` o `delete_diary_entry` de la categoría destroy. La UI nutricional original conserva sus correcciones de cantidades.
+No se publica ni ejecuta `log_body_stat` o `get_body_composition` en modo Gym. No hay `get_body_stats` nuevo. El registro corporal corresponde a `log_body_measurement` de Gym. OAuth admite `create_food`, `edit_diary_entry` y `delete_diary_entry` únicamente con `mcp:destroy`, `MCP_DESTROY_ENABLED=1` y `confirm:true`. Ninguna permite borrar días, historiales, bases de datos ni medidas corporales. La UI nutricional original conserva sus correcciones de cantidades.
 
-Scopes por tool: lectura `mcp:read`; registros `mcp:write`; `set_nutrition_goals` exige **ambos** `mcp:write` y `mcp:goals:write`, además del flag de escritura. `tools/list` describe las herramientas OAuth habilitadas y sus scopes; descubrir una herramienta no autoriza ejecutarla. PAT conserva filtrado de catálogo por scopes. Se corrigió la lectura accidental con PAT write-only.
+Scopes por tool: las tres tools de administración requieren `mcp:destroy` (no se deduce de `mcp:read` ni `mcp:write`); lectura `mcp:read`; registros `mcp:write`; `set_nutrition_goals` exige **ambos** `mcp:write` y `mcp:goals:write`, además del flag de escritura. `tools/list` describe las herramientas OAuth habilitadas y sus scopes; descubrir una herramienta no autoriza ejecutarla. PAT conserva filtrado de catálogo por scopes. Se corrigió la lectura accidental con PAT write-only.
+
+### Crear alimentos y corregir entradas
+
+Para habilitar esta ampliación en una conexión existente, añadir `mcp:destroy` a la API NutriTrace y al permiso del dueño en Auth0, concederlo también en el grant, configurar `MCP_DESTROY_ENABLED=1` en Railway y refrescar el catálogo/reautorizar ChatGPT. No basta añadirlo a RBAC `permissions`: debe estar en el claim `scope` consentido. No se han aplicado estos cambios al tenant real.
+
+`create_food` conserva la validación de nutrientes y duplicados y crea exclusivamente un alimento del usuario autenticado. No edita recetas guardadas ni mediciones.
+
+Para `edit_diary_entry` y `delete_diary_entry`:
+
+1. Leer `list_diary_entries` para la fecha explícita; el rango también devuelve `items_revision` por día.
+2. Seleccionar `items[n].uuid` como `entry_id`. Pasar `items_revision` como **`expected_revision`** y `confirm:true`. El usuario debe haber solicitado la corrección/borrado concreto; el argumento no sustituye los controles de aprobación del cliente.
+3. Solo para entradas legadas sin UUID, usar `entry_index` con la misma revisión obligatoria. Si se pasan ambos selectores, deben coincidir.
+4. El servidor relee exclusivamente el día del usuario autenticado y comprueba revisión/objetivo dentro de la transacción. Cualquier cambio en los alimentos, incluso insertar/reordenar otra entrada, produce conflicto: releer y confirmar el nuevo objetivo. No reintentar con el índice anterior.
+
+La revisión cubre el arreglo completo de alimentos; no contiene secretos ni cambia al leer. Este requisito también se aplica a PAT: los clientes anteriores que solo enviaban índices deben actualizarse. Las respuestas de edición/borrado incluyen la nueva revisión y el UUID cuando existe. Se preservan agua, notas del día, `body_stats` y la fila del día, incluso al retirar su último alimento. Los borrados con UUID generan tombstones de sync; las ediciones actualizan `updatedAt` para reconciliar clientes offline. Los legados sin UUID no ofrecen la misma deduplicación offline: resolver colas antiguas antes de corregirlos.
+
+Una respuesta incierta requiere releer el diario y resolver el resultado; no reutilizar ciegamente la revisión. No existen herramientas de borrado masivo ni de medidas corporales en este catálogo.
 
 ### Cambios explícitos de metas
 
@@ -67,7 +84,7 @@ Después de desplegar y verificar HTTPS/discovery/401:
 2. Introducir la URL canónica completa y seleccionar OAuth obligatorio. Usar el cliente predefinido y sus campos privados; completar la callback exacta en Auth0. No seleccionar acceso anónimo.
 3. Iniciar sesión como propietario y consentir los scopes nutricionales necesarios. Instalar la conexión privada; no enviarla al directorio público ni cambiar de plan por defecto.
 4. En un chat compatible, seleccionar NutriTrace, consultar metas/biblioteca y registrar una porción de un alimento existente y agua para una fecha explícita. Comprobar el resultado en la PWA.
-5. Cambiar una meta explícita con lectura previa y comparar el resultado en Goals/Diary. Pedir una operación destructiva y registro corporal a NutriTrace: deben fallar/no estar disponibles.
+5. Cambiar una meta explícita con lectura previa y comparar el resultado en Goals/Diary. Con datos de prueba acordados, crear un alimento y editar/eliminar una sola entrada con lectura previa y confirmación; comprobarlo en PWA. Borrar días/historiales o registrar/modificar/eliminar medidas corporales debe fallar/no estar disponible.
 6. Seleccionar ambas apps y consultar nutrición y medidas en sus respectivas fuentes. Registrar peso usando Gym exclusivamente; no se produce sincronización entre bases.
 7. Tras cambiar scopes/descriptores, refrescar la conexión y completar nuevo consentimiento si corresponde. Verificar escritura en la cuenta y superficie reales: un mock o una prueba con Codex no demuestra instalación ChatGPT.
 

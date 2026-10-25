@@ -11,6 +11,7 @@
  * log_food. Unit change is refused (cross-unit converts are the food-
  * row editor's job).
  */
+import { entryTargetSchema, resolveEntryTarget, itemsRevision } from '../_entry-target.js';
 import { z } from 'zod';
 import db from '../../../db.js';
 import { DATE_RE, safeJson, todayLocal, toolResult, toolError, isCalendarDate } from '../_util.js';
@@ -22,13 +23,13 @@ export function registerEditDiaryEntry(server, { userId }) {
     {
       title: 'Edit Diary Entry',
       description:
-        'Patch one food item on a diary day by its 0-based index. Editable ' +
+        'Patch one food item on the authenticated user\'s day. First read list_diary_entries; pass item.uuid as entry_id (preferred) and items_revision as expected_revision. Legacy index requires the same revision. Conflicts require a fresh read and confirmation. Editable ' +
         'fields: quantity, portion, meal slot, notes. Name and nutrition come ' +
         'from the food catalog and are not patchable here — swap to a different ' +
         'food by deleting and re-logging. Portion change re-scales nutrition. ' +
         'Requires confirm=true.',
       inputSchema: {
-        entry_index: z.number().int().min(0),
+        ...entryTargetSchema,
         date:        z.string().regex(DATE_RE, 'YYYY-MM-DD').optional(),
         confirm:     z.boolean(),
         patch: z.object({
@@ -36,13 +37,13 @@ export function registerEditDiaryEntry(server, { userId }) {
           portion:  z.number().positive().optional(),
           meal:     z.number().int().min(0).max(9).optional(),
           notes:    z.string().max(500).nullable().optional(),
-        }).refine(
+        }).strict().refine(
           o => Object.keys(o || {}).length > 0,
           'patch must contain at least one editable field'
         ),
       },
     },
-    async ({ entry_index, date, confirm, patch }) => {
+    async ({ entry_id, entry_index, expected_revision, date, confirm, patch }) => {
       const day = date || todayLocal();
       if (!isCalendarDate(day)) return toolError(`Invalid date '${day}'; expected YYYY-MM-DD.`);
       if (confirm !== true) {
@@ -58,11 +59,7 @@ export function registerEditDiaryEntry(server, { userId }) {
       let next;
       try {
         next = mutateDiaryDay(userId, day, cur => {
-          if (entry_index >= cur.items.length) {
-            throw new RangeError(
-              `entry_index ${entry_index} out of range: day ${day} has ${cur.items.length} item(s).`
-            );
-          }
+          entry_index = resolveEntryTarget(cur.items, {entry_id, entry_index, expected_revision});
           const original = cur.items[entry_index];
           before = { ...original };
 
@@ -130,6 +127,7 @@ export function registerEditDiaryEntry(server, { userId }) {
             );
           }
 
+          merged.updatedAt = new Date().toISOString();
           after = merged;
           const items = cur.items.slice();
           items[entry_index] = merged;
@@ -144,6 +142,8 @@ export function registerEditDiaryEntry(server, { userId }) {
       return toolResult({
         ok: true,
         date: day,
+        entry_id: after?.uuid,
+        items_revision: itemsRevision(next.items),
         entry_index,
         before: {
           quantity: before?.quantity,

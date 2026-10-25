@@ -6,7 +6,6 @@ export function authorizedRegistrar(server, auth) {
   return {registerTool(name, definition, handler) {
     if (externalBody() && ['log_body_stat','get_body_composition'].includes(name)) return;
     const read = readTools.has(name), destroy = destroyTools.has(name);
-    if (auth.authKind === 'oauth' && destroy) return;
     const scopes = name === 'set_nutrition_goals' ? ['mcp:write','mcp:goals:write'] : [read ? 'mcp:read' : destroy ? 'mcp:destroy' : 'mcp:write'];
     if (auth.authKind === 'pat' && !scopes.every(s => auth.scopes.includes(s))) return;
     const oauth = auth.authKind === 'oauth' ? {securitySchemes:[{type:'oauth2',scopes}]} : {};

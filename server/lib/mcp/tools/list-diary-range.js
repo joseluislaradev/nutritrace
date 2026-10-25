@@ -4,6 +4,7 @@
  * Return the food items logged for every diary row in an inclusive date
  * range. list_diary_entries remains the single-day compatibility API.
  */
+import { itemsRevision } from '../_entry-target.js';
 import { z } from 'zod';
 import db from '../../../db.js';
 import {
@@ -65,7 +66,7 @@ export function registerListDiaryRange(server, { userId }) {
       ).all(...params);
       const entries = rows.map(row => {
         const items = safeJson(row.items, []);
-        return { date: row.date, items, count: items.length };
+        return { date: row.date, items, items_revision: itemsRevision(items), count: items.length };
       });
       return toolResult({ start: rangeStart, end: rangeEnd, entries, count: entries.length });
     }

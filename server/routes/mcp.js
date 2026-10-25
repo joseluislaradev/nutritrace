@@ -147,10 +147,11 @@ router.delete('/', (req, res) => {
 
 router.post('/', mcpAttemptLimit, authenticate, requireAnyMcpScope, async (req, res) => {
   // Stamp write / destroy eligibility onto the request for the tool
-  // registrar downstream. Server flag AND matching token scope both
-  // required, independently.
+  // registrar downstream. OAuth may discover enabled descriptors, but the
+  // per-tool guard still requires the matching scope before running a handler.
+  // PAT preserves its scope-filtered catalogue. Server flags gate both.
   req.mcpWrites  = WRITE_ENABLED && (req.mcpAuth?.authKind === 'oauth' || req.mcpAuth?.scopes?.includes('mcp:write'));
-  req.mcpDestroy = DESTROY_ENABLED && req.mcpAuth?.authKind === 'pat' && req.mcpAuth?.scopes?.includes('mcp:destroy');
+  req.mcpDestroy = DESTROY_ENABLED && (req.mcpAuth?.authKind === 'oauth' || req.mcpAuth?.scopes?.includes('mcp:destroy'));
   try {
     await handleMcpRequest(req, res);
   } catch (e) {

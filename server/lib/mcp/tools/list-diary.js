@@ -12,6 +12,7 @@
  * Filters out tombstoned diary rows (deleted_at IS NOT NULL) so
  * agents don't see items the user has since deleted.
  */
+import { itemsRevision } from '../_entry-target.js';
 import { z } from 'zod';
 import db from '../../../db.js';
 import { DATE_RE, safeJson, todayLocal, toolResult, toolError, isCalendarDate } from '../_util.js';
@@ -30,7 +31,7 @@ export function listDiaryCore(userId, { date } = {}) {
       WHERE user_id = ? AND date = ? AND deleted_at IS NULL`
   ).get(userId, day);
   const items = row?.items ? safeJson(row.items, []) : [];
-  return { date: day, items, count: items.length };
+  return { date: day, items, items_revision: itemsRevision(items), count: items.length };
 }
 
 export function registerListDiary(server, { userId }) {
@@ -41,7 +42,7 @@ export function registerListDiary(server, { userId }) {
       description:
         'Return the food items logged on a given date (YYYY-MM-DD, defaults to today in the SERVER\'s timezone). ' +
         'Each item includes name, meal slot, portion, unit, quantity, nutrition, and the ' +
-        'timestamp it was added. Pass an explicit date for agents that need calendar accuracy in a different TZ.',
+        'timestamp it was added. Use item.uuid as entry_id and items_revision as expected_revision for edits/deletes; re-read after changes. Pass an explicit date for agents that need calendar accuracy in a different TZ.',
       inputSchema: {
         date: z.string().regex(DATE_RE, 'YYYY-MM-DD').optional(),
       },

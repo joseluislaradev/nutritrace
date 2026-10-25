@@ -69,6 +69,7 @@ export function mutateDiaryDay(userId, date, mutator) {
       bodyStats: raw?.body_stats ? safeJson(raw.body_stats, {}) : {},
       notes:     raw?.notes ?? null,
     };
+    const originalIds = current.items.map(item => item.uuid).filter(Boolean);
     const next = mutator(current);
 
     // #239: nothing leaves here without a uuid. The app's save merges per
@@ -77,6 +78,15 @@ export function mutateDiaryDay(userId, date, mutator) {
     // one, so one MCP write repairs the whole day.
     next.items = ensureUuids(next.items ?? []);
     next.water = ensureUuids(next.water ?? []);
+
+    // Persist single-entry deletions in the same transaction, so a stale
+    // offline client cannot resurrect an entry deleted through MCP.
+    const retainedIds = new Set(next.items.map(item => item.uuid));
+    const tombstone = db.prepare(`INSERT OR IGNORE INTO diary_tombstones
+      (user_id, date, kind, uuid, deleted_at) VALUES (?, ?, 'item', ?, datetime('now'))`);
+    for (const uuid of originalIds) {
+      if (!retainedIds.has(uuid)) tombstone.run(userId, date, uuid);
+    }
 
     const itemsJson     = JSON.stringify(next.items ?? []);
     const waterJson     = JSON.stringify(next.water ?? []);

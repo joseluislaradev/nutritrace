@@ -23,7 +23,7 @@ export async function verifyOAuthToken(token, config = oauthConfig(), keys) {
     if (payload.sub !== config.owner || (payload.azp || payload.client_id) !== config.clientId) throw new McpAuthError(403,'owner_not_allowed');
     let scopes = typeof payload.scope === 'string' ? payload.scope.split(/\s+/) : [];
     if (Array.isArray(payload.permissions)) scopes = scopes.filter(s => payload.permissions.includes(s));
-    scopes = scopes.filter(s => ['mcp:read','mcp:write','mcp:goals:write'].includes(s));
+    scopes = scopes.filter(s => ['mcp:read','mcp:write','mcp:goals:write','mcp:destroy'].includes(s));
     return {authKind:'oauth', userId:config.userId, scopes, principalId:`oauth:${payload.sub}`};
   } catch(e) {
     if (e instanceof McpAuthError) throw e;

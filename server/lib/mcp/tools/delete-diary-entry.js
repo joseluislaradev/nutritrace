@@ -1,15 +1,5 @@
-/**
- * MCP tool: delete_diary_entry (Phase 3, destructive)
- *
- * Remove ONE food item from a diary day by its 0-based index. The
- * caller must have list_diary_entries just before to know the current
- * index — indices shift after any delete/edit. Water and body_stats
- * have their own dedicated wipe tools if we add them later; this tool
- * only touches items[].
- *
- * Returns the removed entry in the response so an agent can offer
- * "undo" by calling log_food with the same fields.
- */
+/** Remove exactly one nutritional food entry; never a whole day or body stats. */
+import { entryTargetSchema, resolveEntryTarget, itemsRevision } from '../_entry-target.js';
 import { z } from 'zod';
 import { DATE_RE, todayLocal, toolResult, toolError, isCalendarDate } from '../_util.js';
 import { mutateDiaryDay, DiaryTombstonedError } from '../_diary-write.js';
@@ -20,18 +10,18 @@ export function registerDeleteDiaryEntry(server, { userId }) {
     {
       title: 'Delete Diary Entry',
       description:
-        'Remove one food item from a diary day by its 0-based index. ' +
-        'Call list_diary_entries first to see current indices — they ' +
-        'shift after any delete/edit, so re-list between multiple ops. ' +
-        'Requires confirm=true to guard against accidental deletion. ' +
-        'Returns the removed entry so you can offer "undo" via log_food.',
+        'Remove exactly one food item from the authenticated user\'s day. ' +
+        'First read list_diary_entries; pass item.uuid as entry_id (preferred) and ' +
+        'items_revision as expected_revision. Legacy index requires the same revision. ' +
+        'Conflicts require a fresh read and confirmation. Requires confirm=true. ' +
+        'Preserves water, notes, body measurements and the day itself.',
       inputSchema: {
-        entry_index: z.number().int().min(0),
+        ...entryTargetSchema,
         date:        z.string().regex(DATE_RE, 'YYYY-MM-DD').optional(),
         confirm:     z.boolean(),
       },
     },
-    async ({ entry_index, date, confirm }) => {
+    async ({ entry_id, entry_index, expected_revision, date, confirm }) => {
       const day = date || todayLocal();
       if (!isCalendarDate(day)) return toolError(`Invalid date '${day}'; expected YYYY-MM-DD.`);
       if (confirm !== true) {
@@ -46,11 +36,7 @@ export function registerDeleteDiaryEntry(server, { userId }) {
       let next;
       try {
         next = mutateDiaryDay(userId, day, cur => {
-          if (entry_index >= cur.items.length) {
-            throw new RangeError(
-              `entry_index ${entry_index} out of range: day ${day} has ${cur.items.length} item(s).`
-            );
-          }
+          entry_index = resolveEntryTarget(cur.items, {entry_id, entry_index, expected_revision});
           removed = cur.items[entry_index];
           const items = cur.items.slice(0, entry_index).concat(cur.items.slice(entry_index + 1));
           return { ...cur, items };
@@ -64,6 +50,8 @@ export function registerDeleteDiaryEntry(server, { userId }) {
       return toolResult({
         ok: true,
         date: day,
+        entry_id: removed?.uuid,
+        items_revision: itemsRevision(next.items),
         removed: {
           name:            removed?.name,
           brand:           removed?.brand,

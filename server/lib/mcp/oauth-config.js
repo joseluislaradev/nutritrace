@@ -24,7 +24,7 @@ export function oauthConfig(env = process.env) {
 }
 export function resourceMetadata(config = oauthConfig()) {
   return { resource: config.resource, authorization_servers:[config.issuer],
-    scopes_supported:['mcp:read','mcp:write','mcp:goals:write'], bearer_methods_supported:['header'] };
+    scopes_supported:['mcp:read','mcp:write','mcp:goals:write','mcp:destroy'], bearer_methods_supported:['header'] };
 }
 export function authChallenge(scope = 'mcp:read') {
   let origin; try { origin = oauthConfig().origin; } catch { return 'Bearer'; }
