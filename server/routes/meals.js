@@ -10,9 +10,12 @@ import { sendMealShared, isEmailConfigured } from '../email.js';
 import { logger } from '../logger.js';
 import { ownerOrOptIn } from '../lib/outbound-policy.js';
 import { cleanCreateKey, findByCreateKey, setCreateKey } from '../lib/create-keys.js';
+import { planningService } from '../lib/planning-service.js';
+import { changeContext } from '../lib/planning-storage.js';
 
 const router = Router();
 router.use(requireAuth);
+router.use((_req,_res,next)=>changeContext.run({source:'manual'},next));
 
 const uid = req => userMgmtActive() ? req.user.id : null;
 
@@ -60,6 +63,8 @@ router.get('/:id', wrap((req, res) => {
 
 // ── POST / ────────────────────────────────────────────────────────────────
 router.post('/', wrap(async (req, res) => {
+  try { req.body = planningService.prepareMeal(uid(req)||0, {...req.body,items:req.body.items||[],portion:req.body.portion??100,unit:req.body.unit||'g'}); }
+  catch(e){return res.status(e.status||400).json({error:e.message});}
   const { name, nutrition, items, img_url, notes, is_recipe, portion, unit, servings, visibility, source_id,
           source_app, source_external_id, source_url, import_warnings } = req.body;
   if (!name) return res.status(400).json({ error: 'Name required' });
@@ -107,16 +112,18 @@ router.post('/', wrap(async (req, res) => {
   // the partial unique index on meals(user_id, source_app, source_external_id).
   if (cleanSourceApp && cleanSourceExtId) {
     const existing = u == null
-      ? db.prepare(`SELECT id FROM meals WHERE user_id IS NULL AND source_app = ? AND source_external_id = ? AND deleted_at IS NULL`).get(cleanSourceApp, cleanSourceExtId)
-      : db.prepare(`SELECT id FROM meals WHERE user_id = ? AND source_app = ? AND source_external_id = ? AND deleted_at IS NULL`).get(u, cleanSourceApp, cleanSourceExtId);
+      ? db.prepare(`SELECT id,revision FROM meals WHERE user_id IS NULL AND source_app = ? AND source_external_id = ? AND deleted_at IS NULL`).get(cleanSourceApp, cleanSourceExtId)
+      : db.prepare(`SELECT id,revision FROM meals WHERE user_id = ? AND source_app = ? AND source_external_id = ? AND deleted_at IS NULL`).get(u, cleanSourceApp, cleanSourceExtId);
     if (existing) {
-      db.prepare(
+      const expected=req.body.expected_revision??req.body.revision??0;
+      const updated=db.prepare(
         `UPDATE meals SET name=?, nutrition=?, items=?, img_url=?, notes=?, is_recipe=?, portion=?, unit=?, servings=?, visibility=?,
-                          source_url=?, import_warnings=?, updated_at=datetime('now') WHERE id=?`
+                          source_url=?, import_warnings=?, updated_at=datetime('now') WHERE id=? AND revision=?`
       ).run(name, JSON.stringify(nutrition || {}), JSON.stringify(items || []),
         localImg, notes || null, is_recipe ? 1 : 0, portion ?? 100, unit || 'g',
         servings != null ? Math.max(1, parseInt(servings) || 1) : null,
-        vis, cleanSourceUrl, warningsCol, existing.id);
+        vis, cleanSourceUrl, warningsCol, existing.id,expected);
+      if(!updated.changes)return res.status(409).json({error:'VERSION_CONFLICT: reread imported recipe before replacing it'});
       return res.status(200).json(parse(db.prepare('SELECT * FROM meals WHERE id = ?').get(existing.id)));
     }
   }
@@ -140,8 +147,7 @@ router.put('/:id', wrap(async (req, res) => {
   const existing = db.prepare('SELECT * FROM meals WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
   if (u != null && existing.user_id !== u) return res.status(403).json({ error: 'Forbidden' });
-  const { name, nutrition, items, img_url, notes, is_recipe, portion, unit, servings, visibility, favorite } = req.body;
-  const fav = favorite != null ? (favorite ? 1 : 0) : existing.favorite;
+  const { img_url, servings } = req.body;
   // Body explicitly set servings → take it (null clears, number clamps to >=1).
   // Body omitted servings entirely → preserve the existing row value (null stays null).
   const srv = 'servings' in req.body
@@ -156,13 +162,11 @@ router.put('/:id', wrap(async (req, res) => {
   const img = 'img_url' in req.body
     ? ((img_url && isExternalUrl(img_url)) ? await localizeImage(img_url, { allowPrivate: ownerOrOptIn(req, 'ALLOW_PRIVATE_IMAGE_URLS') }) : (img_url || null))
     : existing.img_url;
-  db.prepare(
-    `UPDATE meals SET name=?, nutrition=?, items=?, img_url=?, notes=?, is_recipe=?, portion=?, unit=?, servings=?, visibility=?, favorite=?, updated_at=datetime('now') WHERE id=?`
-  ).run(name ?? existing.name, JSON.stringify(nutrition ?? JSON.parse(existing.nutrition || '{}')),
-    JSON.stringify(items ?? JSON.parse(existing.items || '[]')), img,
-    notes ?? existing.notes, is_recipe != null ? (is_recipe ? 1 : 0) : existing.is_recipe,
-    portion ?? existing.portion, unit ?? existing.unit, srv,
-    visibility ?? existing.visibility, fav, req.params.id);
+  const expected=req.body.expected_revision??req.body.revision;
+  if(expected==null && existing.revision!==0)return res.status(428).json({error:'Read the meal revision before saving'});
+  try {
+    planningService.saveMeal(u||0,Number(req.params.id),{...req.body,img_url:img,servings:srv},expected??0);
+  }catch(e){return res.status(e.status||400).json({error:e.message});}
   res.json(parse(db.prepare('SELECT * FROM meals WHERE id = ?').get(req.params.id)));
 }));
 
@@ -186,7 +190,9 @@ router.delete('/:id', wrap((req, res) => {
   const existing = db.prepare('SELECT * FROM meals WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
   if (u != null && existing.user_id !== u) return res.status(403).json({ error: 'Forbidden' });
-  db.prepare(`UPDATE meals SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
+  const expected=req.body?.expected_revision??req.body?.revision??0;
+  const changed=db.prepare(`UPDATE meals SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND revision=?`).run(req.params.id,expected);
+  if(!changed.changes)return res.status(409).json({error:'VERSION_CONFLICT: reread meal before deleting'});
   res.json({ ok: true });
 }));
 

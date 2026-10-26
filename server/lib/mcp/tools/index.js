@@ -1,4 +1,5 @@
 import { registerSetNutritionGoals } from './set-nutrition-goals.js';
+import { registerPlanningTools } from './planning.js';
 /**
  * MCP tool registrar. Called once per request when the McpServer is
  * built. Each tool is registered against the user identified by
@@ -34,6 +35,7 @@ import { registerEditDiaryEntry } from './edit-diary-entry.js';
 import { registerCreateFood } from './create-food.js';
 
 export function registerReadTools(server, ctx) {
+  registerPlanningTools(server, ctx, 'read');
   registerGetGoals(server, ctx);
   registerGetProfile(server, ctx);
   registerGetSteps(server, ctx);
@@ -50,6 +52,7 @@ export function registerReadTools(server, ctx) {
 }
 
 export function registerWriteTools(server, ctx) {
+  registerPlanningTools(server, ctx, 'write');
   registerLogFood(server, ctx);
   registerLogWater(server, ctx);
   registerLogMeal(server, ctx);
@@ -58,6 +61,7 @@ export function registerWriteTools(server, ctx) {
 }
 
 export function registerDestroyTools(server, ctx) {
+  registerPlanningTools(server, ctx, 'destroy');
   registerDeleteDiaryEntry(server, ctx);
   registerEditDiaryEntry(server, ctx);
   registerCreateFood(server, ctx);

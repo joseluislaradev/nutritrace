@@ -1,5 +1,6 @@
 import { preserveDiscoveryMetadata } from './discovery.js';
 import { authorizedRegistrar } from './auth-policy.js';
+import { changeContext } from '../planning-storage.js';
 /**
  * server/lib/mcp/server.js
  *
@@ -21,6 +22,9 @@ import { APP_VERSION } from '../../routes/version-source.js';
 import { registerReadTools, registerWriteTools, registerDestroyTools } from './tools/index.js';
 
 export async function handleMcpRequest(req, res) {
+  return changeContext.run({source:'mcp'},()=>serveMcpRequest(req,res));
+}
+async function serveMcpRequest(req, res) {
   const transport = new StreamableHTTPServerTransport({
     // Stateless — no session id, every request self-contained.
     sessionIdGenerator: undefined,

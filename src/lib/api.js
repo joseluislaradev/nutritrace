@@ -928,7 +928,7 @@ const _NtApiHttp = {
   },
   _mealToApi(meal) {
     const { imgUrl, img_url, ...rest } = meal;
-    return { ...rest, img_url: imgUrl || img_url || null };
+    return { ...rest, img_url: ('imgUrl' in meal ? imgUrl : img_url) || null };
   },
 
   // Meals & Recipes
@@ -939,7 +939,7 @@ const _NtApiHttp = {
   async getRecipes()              { const r = await this.get('/api/meals?recipes=1'); return r.map(m => this._mealFromApi(m)); },
   async createMeal(data)          { const r = await this.post('/api/meals', this._mealToApi(data)); return this._mealFromApi(r); },
   async updateMeal(id, data)      { const r = await this.put(`/api/meals/${id}`, this._mealToApi(data)); return this._mealFromApi(r); },
-  deleteMeal(id)                  { return this.del(`/api/meals/${id}`); },
+  deleteMeal(id, revision=0)      { return this._fetch('DELETE', `/api/meals/${id}`, {expected_revision:revision}); },
   shareMeal(id, visibility, user_ids) { return this.patch(`/api/meals/${id}/share`, { visibility, user_ids }); },
   async copyMeal(id)              { const r = await this.post(`/api/meals/${id}/copy`, {}); return this._mealFromApi(r); },
   markMealUsed(id, date)          { return this.post(`/api/meals/${id}/used`, { date }); },

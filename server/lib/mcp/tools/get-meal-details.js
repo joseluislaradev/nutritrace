@@ -23,12 +23,16 @@ import { safeJson, toolResult, toolError } from '../_util.js';
 export function getMealDetailsCore(userId, { meal_id } = {}) {
   const row = db.prepare(
     `SELECT id, name, is_recipe, servings, portion, unit, notes, nutrition, items,
-            favorite, usage_count, last_used_at, created_at, updated_at
+            favorite, usage_count, last_used_at, created_at, updated_at, revision
        FROM meals
       WHERE user_id = ? AND id = ? AND deleted_at IS NULL`
   ).get(userId, meal_id);
   if (!row) throw new Error(`meal_id ${meal_id} not found in your catalog.`);
   const items = safeJson(row.items, []).map(it => ({
+    food_id: typeof it?.food_id === 'number' ? it.food_id : null,
+    meal_id: typeof it?.meal_id === 'number' ? it.meal_id : null,
+    state: it?.state || 'unspecified',
+    source_revision: it?.source_revision ?? null,
     id: typeof it?.id === 'number' ? it.id : null,
     food_server_id: typeof it?.food_server_id === 'number' ? it.food_server_id : null,
     name: it?.name || null,
@@ -40,6 +44,7 @@ export function getMealDetailsCore(userId, { meal_id } = {}) {
   }));
   return {
     id: row.id,
+    revision: row.revision,
     name: row.name,
     is_recipe: !!row.is_recipe,
     servings: Number.isFinite(Number(row.servings)) ? Number(row.servings) : null,

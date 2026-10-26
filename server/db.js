@@ -1,4 +1,5 @@
 import { installBodySourceGuards } from './lib/body-source-policy.js';
+import { installPlanningStorage } from './lib/planning-storage.js';
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
@@ -1195,5 +1196,6 @@ try {
 }
 
 installBodySourceGuards(db);
+db.transaction(() => installPlanningStorage(db)).immediate();
 
 export default db;

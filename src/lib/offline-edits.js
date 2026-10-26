@@ -180,7 +180,7 @@ export function collapseCatalogOps(ops, table = 'foods') {
     const prev = byId.get(id);
     if (op.action === 'delete') {
       if (isTempId(id) && prev?.action === 'create') byId.delete(id);
-      else byId.set(id, { ...op, data: prev?.data });
+      else byId.set(id, { ...op, data: {...(op.data||{}),...(prev?.data||{})} });
       continue;
     }
     byId.set(id, prev?.action === 'create'

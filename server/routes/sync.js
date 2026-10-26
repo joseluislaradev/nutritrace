@@ -10,6 +10,8 @@
  */
 import { Router } from 'express';
 import db from '../db.js';
+import { planningService, fail } from '../lib/planning-service.js';
+import { changeContext } from '../lib/planning-storage.js';
 import { wrap } from '../logger.js';
 import { requireAuth, userMgmtActive } from '../middleware/auth.js';
 import { logger } from '../logger.js';
@@ -35,6 +37,7 @@ async function _localizeIfNeeded(url, allowPrivate = false) {
 
 const router = Router();
 router.use(requireAuth);
+router.use((_req,_res,next)=>changeContext.run({source:'sync'},next));
 
 const uid = req => userMgmtActive() ? req.user?.id : null;
 
@@ -348,12 +351,18 @@ router.post('/push', wrap(async (req, res) => {
     // ── Meals ────────────────────────────────────────────────────────────
     for (const m of meals) {
       const existing = m.server_id
-        ? db.prepare('SELECT updated_at, created_at, user_id FROM meals WHERE id = ?').get(m.server_id)
+        ? db.prepare('SELECT * FROM meals WHERE id = ?').get(m.server_id)
         : null;
+      if(existing && _ownsRow(existing,u) && (m.revision??0)!==existing.revision)
+        fail('VERSION_CONFLICT: recipe changed on another device; local changes were not discarded',409);
+      if(!m.deleted_at && (!existing || _ownsRow(existing,u))){
+        const old=existing?{...existing,items:JSON.parse(existing.items||'[]'),nutrition:JSON.parse(existing.nutrition||'{}')}:undefined;
+        Object.assign(m,planningService.prepareMeal(u||0,{...m,items:m.items||[]},old));
+      }
       if (m.server_id && existing) {
         // Only this account's own row changes (as PUT /api/... does); anyone
         // else's is answered as if the push lost the time check.
-        if (_ownsRow(existing, u) && pushWins(m.updated_at, existing.updated_at, existing)) {
+        if (_ownsRow(existing, u)) {
           if (m.deleted_at) {
             db.prepare(`UPDATE meals SET deleted_at = datetime('now'), updated_at = ? WHERE id = ?`).run(stamp(m.updated_at, existing), m.server_id);
           } else {
@@ -364,7 +373,7 @@ router.post('/push', wrap(async (req, res) => {
               m.servings != null ? Math.max(1, parseInt(m.servings) || 1) : null,
               m.favorite ? 1 : 0, m.usage_count || 0, m.last_used_at || null, stamp(m.updated_at, existing), m.server_id);
           }
-          result.meals.push({ client_id: m.client_id, server_id: m.server_id });
+          result.meals.push({ client_id: m.client_id, server_id: m.server_id, row: parse(winner('meals',m.server_id)) });
         } else if (_ownsRow(existing, u)) {
           result.meals.push({ client_id: m.client_id, server_id: m.server_id, row: parse(winner('meals', m.server_id)) });
         } else {

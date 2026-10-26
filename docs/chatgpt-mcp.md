@@ -41,6 +41,13 @@ Referencia del proveedor: [compatibilidad resource/issuer](https://auth0.com/ai/
 
 ## Permisos y herramientas
 
+La fase 1 de planificación amplía este catálogo con comidas/recetas, plantillas
+semanales recurrentes, excepciones por fecha, inventario, listas de compras y
+versiones. Contratos, permisos, migración, pruebas y actualización de la conexión:
+[Planificación y compras](planning-shopping.md). Las restricciones anteriores
+sobre administrar recetas mediante MCP se sustituyen por los contratos de esa
+ampliación cuando esta versión del servidor esté desplegada.
+
 En modo Gym, ChatGPT puede consultar biblioteca, comidas, diario, totales, perfil nutricional y metas. Se reutilizan `log_food`, `log_meal` y `log_water`. Para registrar, los alimentos deben existir en catálogo; `create_food` permite crear uno con confirmación y permiso adicional; `log_meal` registra comidas guardadas, no recetas de la biblioteca como si fueran comidas. Para recetas, usar los flujos originales de la PWA; los nuevos productos también pueden crearse mediante MCP. No reconstruir recetas ni alterar las guardadas por registrar un snack.
 
 No se publica ni ejecuta `log_body_stat` o `get_body_composition` en modo Gym. No hay `get_body_stats` nuevo. El registro corporal corresponde a `log_body_measurement` de Gym. OAuth admite `create_food`, `edit_diary_entry` y `delete_diary_entry` únicamente con `mcp:destroy`, `MCP_DESTROY_ENABLED=1` y `confirm:true`. Ninguna permite borrar días, historiales, bases de datos ni medidas corporales. La UI nutricional original conserva sus correcciones de cantidades.

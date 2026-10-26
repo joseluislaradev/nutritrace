@@ -38,6 +38,8 @@ COPY --from=build /app/dist ./dist
 # /src/lib/nutrition.js — mirror that path in the container so local dev
 # and Docker resolve the same file without a re-export shim.
 COPY src/lib/nutrition.js /src/lib/nutrition.js
+COPY src/lib/goal-resolver.js /src/lib/goal-resolver.js
+COPY src/lib/units.js /src/lib/units.js
 # Same arrangement for the Sleep Quality walk: Google Health derives it on
 # the server, Health Connect on the phone, from this one file (#236).
 # scripts/docker-src-imports.test.js fails if a server import of src/lib has

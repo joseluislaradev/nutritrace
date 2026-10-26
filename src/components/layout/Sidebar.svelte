@@ -36,6 +36,7 @@
   $: BASE_NAV = [
     { path: '/',           icon: 'book',           label: $_('nav.diary')      },
     { path: '/foods',      icon: 'restaurant',     label: $_('nav.foods')      },
+    { path: '/planning', icon: 'shopping_cart', label: 'Planificación y compras' },
     { path: '/statistics', icon: 'bar_chart',      label: $_('nav.statistics') },
     { path: '/goals',      icon: 'flag',           label: $_('nav.goals')      },
     { path: '/settings',   icon: 'settings',       label: $_('nav.settings')   },

@@ -784,13 +784,13 @@ export function createOfflineApi(http) {
       return _queueCatalog(store, 'meals', 'update', id, data);
     },
 
-    async deleteMeal(id) {
+    async deleteMeal(id,revision=0) {
       _changedSomething = true;
       id = _realId(id);
       const ops = await _loadOps();
       if (_online() && !ops.length && !isTempId(id)) {
         try {
-          const r = await http.deleteMeal(id);
+          const r = await http.deleteMeal(id,revision);
           for (const store of ['meals', 'recipes']) await _tx(store, 'readwrite', s => s.delete(Number(id)));
           return r;
         } catch (err) {
@@ -798,7 +798,7 @@ export function createOfflineApi(http) {
           _publish({ online: false });
         }
       }
-      await _queueCatalog('meals', 'meals', 'delete', id, null);
+      await _queueCatalog('meals', 'meals', 'delete', id, {revision});
       await _tx('recipes', 'readwrite', s => s.delete(Number(id)));
       return { ok: true };
     },

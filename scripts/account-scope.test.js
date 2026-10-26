@@ -79,10 +79,13 @@ test('the diary routes pass the diary owner to both helpers', () => {
 
 test('the sync push only changes rows the account owns', () => {
   const sync = read('../server/routes/sync.js');
-  for (const table of ['foods', 'meals', 'activity_log', 'fasts']) {
+  for (const table of ['foods', 'activity_log', 'fasts']) {
     assert.match(sync, new RegExp(`SELECT updated_at(, created_at)?, user_id(, [a-z_, ]+)? FROM ${table} WHERE id = \\?`), `${table} reads its owner`);
   }
-  assert.equal((sync.match(/if \(_ownsRow\(existing, u\) && pushWins\(/g) || []).length, 4);
+  assert.match(sync, /SELECT \* FROM meals WHERE id = \?/);
+  assert.match(sync, /if \(_ownsRow\(existing, u\)\)/);
+  assert.match(sync, /m\.revision\?\?0\)!==existing\.revision/);
+  assert.equal((sync.match(/if \(_ownsRow\(existing, u\) && pushWins\(/g) || []).length, 3);
   assert.match(sync, /function _ownsRow\(row, u\) \{\s*return u == null \|\| row\.user_id === u;/);
 });
 

@@ -51,6 +51,7 @@ function fixture({ offline = false, useCache = true } = {}) {
   ).run(original).lastInsertRowid);
   let local = { ...db.prepare('SELECT * FROM meals WHERE id=?').get(id), server_id: id,
     items: [], nutrition: {}, sync_status: 'synced' };
+  let networkOffline=offline;
   const requests = [];
   const storage = new Map([['nt:serverUrl', base]]);
   const localStorage = { getItem: key => storage.get(key) ?? null };
@@ -82,7 +83,7 @@ function fixture({ offline = false, useCache = true } = {}) {
     dbMarkWellnessSynced: async () => {}, dbPurgeSoftDeleted: async () => {},
     writable: value => ({ update: fn => { value = fn(value); } }),
     fetch: (url, options) => {
-      const promise = offline && options.method === 'PUT'
+      const promise = networkOffline && options.method === 'POST'
         ? Promise.reject(new Error('simulated offline save'))
         : fetch(url, options).then(response => {
           assert.equal(response.status, 200);
@@ -95,7 +96,7 @@ function fixture({ offline = false, useCache = true } = {}) {
   const { NtApiCached: api } = loadClient('api-cached.js', ['NtApiCached'], bindings);
   const { pushChanges } = loadClient('sync.js', ['pushChanges'], bindings);
   return {
-    api, id, pushChanges, requests,
+    api, id, pushChanges, requests, goOnline:()=>{networkOffline=false;},
     row: () => db.prepare('SELECT img_url, servings FROM meals WHERE id=?').get(id),
   };
 }
@@ -103,8 +104,7 @@ function fixture({ offline = false, useCache = true } = {}) {
 test('background sync preserves servings even without an image cache', async () => {
   const f = fixture({ useCache: false });
   await f.api.updateMeal(f.id, { ...await f.api.getMeal(f.id), servings: 12 });
-  await f.requests[0].promise;
-  assert.equal(f.row().servings, 12);
+  assert.equal(f.requests.length,0,'native edits use one sync writer');
   await f.pushChanges();
   assert.equal(f.row().servings, 12);
 });
@@ -112,7 +112,7 @@ test('background sync preserves servings even without an image cache', async () 
 test('explicit photo removal and unset servings still survive save and sync', async () => {
   const f = fixture({ useCache: false });
   await f.api.updateMeal(f.id, { ...await f.api.getMeal(f.id), imgUrl: '', servings: null });
-  await f.requests[0].promise;
+  assert.equal(f.requests.length,0,'no duplicate inline PUT');
   await f.pushChanges();
   assert.deepEqual(f.row(), { img_url: null, servings: null });
 });

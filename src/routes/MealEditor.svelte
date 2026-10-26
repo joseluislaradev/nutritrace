@@ -291,7 +291,7 @@
     );
     if (!proceed) return;
     try {
-      await NtApi.deleteMeal(meal.id);
+      await NtApi.deleteMeal(meal.id,meal.revision??0);
       clearMealEditorState();
       showSuccess($_('meal_editor.ct_refresh.deleted_toast'));
       pop();
@@ -542,7 +542,7 @@
       if (foods.length === 0) return;
     }
     multiPortionItems = foods.map(food => ({
-      food,
+      food:ingredientReference(food,pickerTab===0?'food':'meal'),
       portion: food.portion || 100,
       unit: food.unit || 'g',
       qty: food.quantity || 1,
@@ -580,9 +580,13 @@
   // shared), persist it to the local catalogue first so the recipe ingredient
   // has a real food_id to reference. Mirrors Foods.svelte's pickFood flow.
   // Returns the saved (local) food, or null if the save failed.
+  function ingredientReference(food,type) {
+    const id=isNative?food.server_id:food.id;
+    return {...food,type,...(id?type==='meal'?{meal_id:id}:{food_id:id,food_server_id:id}:{unresolved_reference:true})};
+  }
   async function _maybePersistPickedFood(food) {
-    if (pickerTab !== 0) return food;                 // Meals/Recipes are always local
-    if (_pickerSource === 'local') return food;
+    if (pickerTab !== 0) return ingredientReference(food,'meal');                 // Meals/Recipes are always local
+    if (_pickerSource === 'local') return ingredientReference(food,'food');
     _pickerSavingPick = true;
     try {
       if (_pickerSource === 'shared' && food._shared_by != null) {
@@ -591,7 +595,7 @@
         showSuccess('Saved to your catalog');
         // Refresh the local list so subsequent picks see the new row
         pickerFoods = await NtApi.getFoods();
-        return mine;
+        return ingredientReference(mine,'food');
       }
       if (_pickerSource === 'off' || _pickerSource === 'usda' || _pickerSource === 'mealie') {
         if (_pickerSource === 'off') {
@@ -616,7 +620,7 @@
         if (!saved) throw new Error('Create returned no food');
         showSuccess('Saved to your catalog');
         pickerFoods = await NtApi.getFoods();
-        return saved;
+        return ingredientReference(saved,'food');
       }
       return food;
     } catch (e) {
@@ -1197,6 +1201,9 @@
               {/if}
               <div class="ing-info">
                 <span class="ingredient-name">{item.name}</span>
+                <label style="font-size:12px">Estado para compras
+                  <select value={item.state||'unspecified'} on:change={e=>{item.state=e.currentTarget.value;meal={...meal};}}><option value="unspecified">Sin especificar</option><option value="raw">Crudo</option><option value="cooked">Cocido</option></select>
+                </label>
                 <span class="text-3" style="font-size:12px">{item.portion} {item.unit}</span>
               </div>
               <span class="text-3 text-sm">{_ingEnergy.value.toLocaleString()} {_ingEnergy.unit}</span>

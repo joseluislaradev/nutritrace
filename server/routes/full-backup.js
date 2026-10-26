@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import AdmZip from 'adm-zip';
 import multer from 'multer';
 import db from '../db.js';
+import { changeContext, installPlanningStorage } from '../lib/planning-storage.js';
 import { logger } from '../logger.js';
 import { seedSmtpFromEnv } from '../email.js';
 import { seedAiFromEnv } from '../ai.js';
@@ -188,10 +189,13 @@ const upload = multer({
   limits: { fileSize: _backupMaxMb * 1024 * 1024 },
 });
 
-function restoreFromZip(zip) {
+export function restoreFromZip(zip) {
   const data = JSON.parse(zip.readAsText('database.json'));
 
-  db.transaction(() => {
+  changeContext.run({suspend:true},()=>db.transaction(() => {
+    db.prepare('DELETE FROM planning_requests').run();
+    db.prepare('DELETE FROM planning_documents').run();
+    db.prepare('DELETE FROM entity_versions').run();
     db.prepare('DELETE FROM password_reset_tokens').run();
     db.prepare('DELETE FROM invite_tokens').run();
     db.prepare('DELETE FROM food_shares').run();
@@ -219,21 +223,21 @@ function restoreFromZip(zip) {
     // round-trip these values as NULL, silently losing every user's serving
     // units (slice / cookie / bottle) + per-ml-vs-per-g basis + density.
     const insFood = db.prepare(`
-      INSERT OR IGNORE INTO foods (id, user_id, name, brand, nutrition, portion, unit, img_url, notes, category, barcode, visibility, source_id, favorite, usage_count, last_used_at, nutrition_basis, alt_units, density_g_ml, source_app, source_external_id, source_url, created_at, updated_at, deleted_at)
-      VALUES (@id, @user_id, @name, @brand, @nutrition, @portion, @unit, @img_url, @notes, @category, @barcode, @visibility, @source_id, @favorite, @usage_count, @last_used_at, @nutrition_basis, @alt_units, @density_g_ml, @source_app, @source_external_id, @source_url, @created_at, COALESCE(@updated_at, datetime('now')), @deleted_at)
+      INSERT OR IGNORE INTO foods (id, user_id, name, brand, nutrition, portion, unit, img_url, notes, category, barcode, visibility, source_id, favorite, usage_count, last_used_at, nutrition_basis, alt_units, density_g_ml, source_app, source_external_id, source_url, revision, created_at, updated_at, deleted_at)
+      VALUES (@id, @user_id, @name, @brand, @nutrition, @portion, @unit, @img_url, @notes, @category, @barcode, @visibility, @source_id, @favorite, @usage_count, @last_used_at, @nutrition_basis, @alt_units, @density_g_ml, @source_app, @source_external_id, @source_url, @revision, @created_at, COALESCE(@updated_at, datetime('now')), @deleted_at)
     `);
-    for (const f of data.foods || []) insFood.run({ visibility: 'private', source_id: null, favorite: 0, usage_count: 0, last_used_at: null, nutrition_basis: null, alt_units: null, density_g_ml: null, source_app: null, source_external_id: null, source_url: null, updated_at: null, deleted_at: null, ...f });
+    for (const f of data.foods || []) insFood.run({ revision:0, visibility: 'private', source_id: null, favorite: 0, usage_count: 0, last_used_at: null, nutrition_basis: null, alt_units: null, density_g_ml: null, source_app: null, source_external_id: null, source_url: null, updated_at: null, deleted_at: null, ...f });
 
     // Federation source columns (source_app / source_external_id / source_url /
     // import_warnings, added for the CookTrace pull flow) are part of the
     // meals row now. Restoring without them silently drops the "From
     // CookTrace" badge and the deep-link back to the source on restore.
     const insMeal = db.prepare(`
-      INSERT OR IGNORE INTO meals (id, user_id, name, nutrition, items, img_url, notes, is_recipe, portion, unit, servings, visibility, source_id, favorite, usage_count, last_used_at, source_app, source_external_id, source_url, import_warnings, created_at, updated_at, deleted_at)
-      VALUES (@id, @user_id, @name, @nutrition, @items, @img_url, @notes, @is_recipe, @portion, @unit, @servings, @visibility, @source_id, @favorite, @usage_count, @last_used_at, @source_app, @source_external_id, @source_url, @import_warnings, @created_at, COALESCE(@updated_at, datetime('now')), @deleted_at)
+      INSERT OR IGNORE INTO meals (id, user_id, name, nutrition, items, img_url, notes, is_recipe, portion, unit, servings, visibility, source_id, favorite, usage_count, last_used_at, source_app, source_external_id, source_url, import_warnings, revision, created_at, updated_at, deleted_at)
+      VALUES (@id, @user_id, @name, @nutrition, @items, @img_url, @notes, @is_recipe, @portion, @unit, @servings, @visibility, @source_id, @favorite, @usage_count, @last_used_at, @source_app, @source_external_id, @source_url, @import_warnings, @revision, @created_at, COALESCE(@updated_at, datetime('now')), @deleted_at)
     `);
     for (const m of data.meals || []) insMeal.run({
-      visibility: 'private', source_id: null, favorite: 0, usage_count: 0, last_used_at: null,
+      revision: 0, visibility: 'private', source_id: null, favorite: 0, usage_count: 0, last_used_at: null,
       source_app: null, source_external_id: null, source_url: null, import_warnings: null,
       updated_at: null, deleted_at: null, servings: null, ...m,
     });
@@ -353,7 +357,17 @@ function restoreFromZip(zip) {
       VALUES (@token, @email, @role, @created_by, @expires_at, @used)
     `);
     for (const i of data.invite_tokens || []) insInvite.run({ email: null, role: 'user', created_by: null, used: 0, ...i });
-  })();
+    for (const [table,columns] of [
+      ['planning_documents',['user_id','kind','id','revision','payload','deleted','updated_at']],
+      ['entity_versions',['user_id','kind','entity_id','revision','snapshot','source','reason','reason_status','recorded_at']],
+      ['planning_requests',['user_id','request_key','fingerprint','response']],
+    ]) {
+      const insert=db.prepare(`INSERT INTO ${table}(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`);
+      for(const row of data[table]||[])insert.run(...columns.map(c=>row[c]));
+    }
+    // Old backups have no version history: establish an honest baseline.
+    installPlanningStorage(db);
+  }).immediate());
 
   // Restore images — guard against zip-slip and zip-bomb attacks
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -387,7 +401,7 @@ function restoreFromZip(zip) {
   seedAiFromEnv();
 }
 
-function dumpDatabase() {
+export function dumpDatabase() {
   // ── Coverage audit (2026-07) ─────────────────────────────────────────────
   // Every user-content table in server/db.js is included below. Deliberate
   // exclusions and their rationale:
@@ -417,6 +431,9 @@ function dumpDatabase() {
     users:            db.prepare('SELECT * FROM users').all(),
     foods:            db.prepare('SELECT * FROM foods').all(),
     meals:            db.prepare('SELECT * FROM meals').all(),
+    planning_documents: db.prepare('SELECT * FROM planning_documents').all(),
+    entity_versions: db.prepare('SELECT * FROM entity_versions').all(),
+    planning_requests: db.prepare('SELECT * FROM planning_requests').all(),
     food_shares:      db.prepare('SELECT * FROM food_shares').all(),
     meal_shares:      db.prepare('SELECT * FROM meal_shares').all(),
     diary:            db.prepare('SELECT * FROM diary').all(),

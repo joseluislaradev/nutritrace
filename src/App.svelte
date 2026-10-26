@@ -204,6 +204,7 @@
   import Foods      from './routes/Foods.svelte';
   import FoodEditor from './routes/FoodEditor.svelte';
   import MealEditor from './routes/MealEditor.svelte';
+  import Planning from './routes/Planning.svelte';
   import Statistics from './routes/Statistics.svelte';
   import Goals      from './routes/Goals.svelte';
   import Settings   from './routes/Settings.svelte';
@@ -223,6 +224,7 @@
     '/foods/edit':      FoodEditor,
     '/foods/edit/:id':  FoodEditor,
     '/meal-editor':     MealEditor,
+    '/planning':        Planning,
     '/meal-editor/:id': MealEditor,
     '/statistics':      Statistics,
     '/wellness':        Wellness,

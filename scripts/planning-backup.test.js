@@ -1,0 +1,34 @@
+import test,{after} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {randomUUID} from 'node:crypto';
+import {createRequire} from 'node:module';
+const require=createRequire(new URL('../server/package.json',import.meta.url));
+const AdmZip=require('adm-zip'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'nt-plan-backup-'));
+Object.assign(process.env,{DB_PATH:path.join(dir,'fixture.db'),UPLOADS_PATH:path.join(dir,'uploads'),BACKUPS_PATH:path.join(dir,'backups'),JWT_SECRET:'local-synthetic-secret',NODE_ENV:'test'});
+const {default:db}=await import('../server/db.js');
+const {planningService:s}=await import('../server/lib/planning-service.js');
+const {dumpDatabase,restoreFromZip}=await import('../server/routes/full-backup.js');
+after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
+test('full backup roundtrip preserves planning, original IDs, catalogue revisions, pending reasons and immutable history',()=>{
+  const u=Number(db.prepare("INSERT INTO users(username,password_hash)VALUES('owner','synthetic')").run().lastInsertRowid);
+  const food=Number(db.prepare("INSERT INTO foods(user_id,name,nutrition,portion,unit)VALUES(?,'Anterior','{}',100,'g')").run(u).lastInsertRowid);
+  db.prepare("UPDATE foods SET name='Actual' WHERE id=?").run(food);
+  const t=s.execute(u,'save_planning_template',{data:{name:'Semanal',starts_on:'2026-10-01',days:Array.from({length:7},()=>({slots:[]}))},expected_revision:0,idempotency_key:randomUUID()},'manual');
+  const before=dumpDatabase(),zip=new AdmZip();zip.addFile('database.json',Buffer.from(JSON.stringify(before)));
+  restoreFromZip(zip);
+  const restored=dumpDatabase();
+  for(const table of ['planning_documents','entity_versions','planning_requests'])assert.deepEqual(restored[table],before[table],table);
+  assert.equal(restored.foods[0].id,food);assert.equal(restored.foods[0].name,'Actual');assert.equal(restored.foods[0].revision,1);
+  assert.equal(s.get(u,'template',t.id).payload.name,'Semanal');
+});
+test('legacy backups restore their original records with an honest baseline and no fabricated justification',()=>{
+  const backup=dumpDatabase();delete backup.planning_documents;delete backup.entity_versions;delete backup.planning_requests;
+  for(const row of backup.foods)delete row.revision;
+  const zip=new AdmZip();zip.addFile('database.json',Buffer.from(JSON.stringify(backup)));restoreFromZip(zip);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM planning_documents').get().n,0);
+  const versions=db.prepare('SELECT * FROM entity_versions').all();assert(versions.length>0);assert(versions.every(v=>v.source==='baseline'&&v.reason===null&&v.revision===0));
+  assert.equal(db.prepare('SELECT name FROM foods').get().name,'Actual');
+});

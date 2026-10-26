@@ -116,7 +116,7 @@ function _mealFromApi(row) {
 
 function _mealToApi(meal) {
   const { imgUrl, img_url, ...rest } = meal;
-  return { ...rest, img_url: _stripResolvedImgUrl(imgUrl || img_url) || null };
+  return { ...rest, img_url: _stripResolvedImgUrl('imgUrl' in meal ? imgUrl : img_url) || null };
 }
 
 export const NtApiCached = {
@@ -227,14 +227,13 @@ export const NtApiCached = {
 
   async updateMeal(id, data) {
     const local = await dbUpdateMeal(id, _mealToApi(data));
-    _sendOrQueue(local?.server_id, 'PUT', sid => `/api/meals/${sid}`, _mealToApi(data));
+    schedulePush(); // One writer: sync carries the revision and preserves conflicts.
     return _mealFromApi(local);
   },
 
   async deleteMeal(id) {
-    const meal = await dbGetMeal(id).catch(() => null);
     await dbDeleteMeal(id);
-    _sendOrQueue(meal?.server_id, 'DELETE', sid => `/api/meals/${sid}`);
+    schedulePush();
     return { ok: true };
   },
 

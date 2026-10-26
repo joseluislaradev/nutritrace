@@ -54,6 +54,7 @@ function fixture({ offline = false, useCache = true } = {}) {
   ).run(original).lastInsertRowid);
   let local = { ...db.prepare('SELECT * FROM meals WHERE id=?').get(id), server_id: id,
     items: [], nutrition: {}, sync_status: 'synced' };
+  let networkOffline=offline;
   const requests = [];
   const storage = new Map([['nt:serverUrl', base]]);
   const localStorage = { getItem: key => storage.get(key) ?? null };
@@ -85,7 +86,7 @@ function fixture({ offline = false, useCache = true } = {}) {
     dbMarkWellnessSynced: async () => {}, dbPurgeSoftDeleted: async () => {},
     writable: value => ({ update: fn => { value = fn(value); } }),
     fetch: (url, options) => {
-      const promise = offline && options.method === 'PUT'
+      const promise = networkOffline && options.method === 'POST'
         ? Promise.reject(new Error('simulated offline save'))
         : fetch(url, options).then(response => {
           assert.equal(response.status, 200);
@@ -98,18 +99,17 @@ function fixture({ offline = false, useCache = true } = {}) {
   const { NtApiCached: api } = loadClient('api-cached.js', ['NtApiCached'], bindings);
   const { pushChanges } = loadClient('sync.js', ['pushChanges'], bindings);
   return {
-    api, id, pushChanges, requests,
+    api, id, pushChanges, requests, goOnline:()=>{networkOffline=false;},
     row: () => db.prepare('SELECT img_url, servings FROM meals WHERE id=?').get(id),
   };
 }
 
-test('editing a recipe preserves its cached image through PUT and sync', async () => {
+test('editing a recipe preserves its cached image through the single sync writer', async () => {
   const f = fixture();
   const meal = await f.api.getMeal(f.id);
   assert.equal(meal.imgUrl, cached);
   await f.api.updateMeal(f.id, { ...meal, servings: null });
-  await f.requests[0].promise;
-  assert.deepEqual(f.row(), { img_url: original, servings: null });
+  assert.equal(f.requests.length,0,'native edits use one sync writer');
   await f.pushChanges();
   assert.deepEqual(f.row(), { img_url: original, servings: null });
 });
@@ -117,7 +117,9 @@ test('editing a recipe preserves its cached image through PUT and sync', async (
 test('offline recipe edit retains its image when pushed later', async () => {
   const f = fixture({ offline: true });
   await f.api.updateMeal(f.id, { ...await f.api.getMeal(f.id), servings: null });
-  await assert.rejects(f.requests[0].promise, /simulated offline/);
+  assert.equal(f.requests.length,0);
+  await assert.rejects(f.pushChanges(), /simulated offline/);
+  f.goOnline();
   await f.pushChanges();
   assert.deepEqual(f.row(), { img_url: original, servings: null });
 });
@@ -125,7 +127,7 @@ test('offline recipe edit retains its image when pushed later', async () => {
 test('explicit photo removal and unset servings still survive save and sync', async () => {
   const f = fixture();
   await f.api.updateMeal(f.id, { ...await f.api.getMeal(f.id), imgUrl: '', servings: null });
-  await f.requests[0].promise;
+  assert.equal(f.requests.length,0,'no duplicate inline PUT');
   await f.pushChanges();
   assert.deepEqual(f.row(), { img_url: null, servings: null });
 });
@@ -136,7 +138,8 @@ test('a recipe photo supplied inline on edit is stored as a file and visible in 
   await f.api.updateMeal(f.id, {
     ...await f.api.getMeal(f.id), imgUrl: `data:image/png;base64,${bytes.toString('base64')}`,
   });
-  await f.requests[0].promise;
+  assert.equal(f.requests.length,0);
+  await f.pushChanges();
   const image = f.row().img_url;
   assert.match(image, /^\/uploads\//);
   assert.deepEqual(readFileSync(join(temp, image)), bytes);

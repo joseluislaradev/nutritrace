@@ -310,6 +310,9 @@ async function _applySchema(db) {
     try {
       const info = await db.query(`PRAGMA table_info(${tbl})`);
       const cols = (info?.values || []).map(r => r.name);
+      if (!cols.includes('revision')) {
+        await db.execute(`ALTER TABLE ${tbl} ADD COLUMN revision INTEGER NOT NULL DEFAULT 0`);
+      }
       if (!cols.includes('favorite')) {
         await db.execute(`ALTER TABLE ${tbl} ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0`);
       }
@@ -1911,6 +1914,8 @@ export async function dbUpsertFromServer(table, serverRecord) {
       );
     }
   }
+  if ((table === 'foods' || table === 'meals') && Number.isInteger(data.revision))
+    await db.run(`UPDATE ${table} SET revision=? WHERE server_id=?`, [data.revision,serverId]);
 }
 
 // Upsert diary from server pull (keyed by date)

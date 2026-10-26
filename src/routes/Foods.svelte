@@ -1386,7 +1386,7 @@
 
   async function deleteItem(item) {
     if (currentStore === 'foodList') await NtApi.deleteFood(item.id);
-    else await NtApi.deleteMeal(item.id);
+    else await NtApi.deleteMeal(item.id,item.revision??0);
     await load();
     showSuccess($_('foods.toast.deleted'));
   }
@@ -1440,7 +1440,7 @@
     for (const id of ids) {
       try {
         if (store === 'foodList') await NtApi.deleteFood(id);
-        else await NtApi.deleteMeal(id);
+        else await NtApi.deleteMeal(id,filteredList.find(item=>item.id===id)?.revision??0);
         ok++;
       } catch (e) {
         console.error('[foods] bulk delete failed for', id, e);
@@ -2005,6 +2005,7 @@
       <h1 class="select-mode-title">{manageSelected.size} selected</h1>
     {:else}
       <h1>{$_('routes.foods.title')}</h1>
+      <button class="btn-icon" on:click={() => push('/planning')} aria-label="Planificación y compras" title="Planificación y compras"><span class="material-symbols-rounded">shopping_cart</span></button>
       <button class="btn-icon accent" on:click={() => {
         if (activeTab === 0) openEditor(null, 'foodList');
         else if (activeTab === 1) openMealEditor(null, false);
