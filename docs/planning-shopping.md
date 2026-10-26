@@ -49,6 +49,14 @@ utilizan los mismos comandos. Los resultados de listas se envuelven en
 
 La migración de `planning-storage.js` corre en una transacción al abrir la base:
 
+Las funciones SQLite del historial se registran en cada conexión antes de las
+migraciones de arranque. Los triggers persisten en el archivo de base de datos;
+las funciones no. Registrarlas tarde provoca `no such function:
+nt_history_enabled` al reiniciar una instalación que ya tiene esos triggers.
+La corrección solo cambia el orden de registro: no requiere borrar el volumen,
+eliminar triggers ni reconstruir los datos. La prueba `planning-restart.test.js`
+abre la misma base en procesos sucesivos y comprueba datos, revisiones e historial.
+
 | Tabla/cambio | Uso |
 |---|---|
 | `planning_documents` | Plantillas, excepciones, inventario y listas; JSON y revisión por documento |

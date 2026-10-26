@@ -2,11 +2,17 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 export const changeContext = new AsyncLocalStorage();
 
-// Additive migration. Existing rows, IDs and sync timestamps are untouched.
-export function installPlanningStorage(db) {
+// SQLite functions belong to a connection; persisted triggers survive restarts.
+// Register these before any startup migration can write to catalogue tables.
+export function registerPlanningFunctions(db) {
   db.function('nt_change_source', () => changeContext.getStore()?.source || 'manual_or_sync');
   db.function('nt_change_reason', () => changeContext.getStore()?.reason || null);
   db.function('nt_history_enabled', () => changeContext.getStore()?.suspend ? 0 : 1);
+}
+
+// Additive migration. Existing rows, IDs and sync timestamps are untouched.
+export function installPlanningStorage(db) {
+  registerPlanningFunctions(db);
   db.exec(`
     CREATE TABLE IF NOT EXISTS planning_documents (
       user_id INTEGER NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL,

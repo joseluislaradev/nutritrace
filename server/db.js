@@ -1,5 +1,5 @@
 import { installBodySourceGuards } from './lib/body-source-policy.js';
-import { installPlanningStorage } from './lib/planning-storage.js';
+import { installPlanningStorage, registerPlanningFunctions } from './lib/planning-storage.js';
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
@@ -10,6 +10,7 @@ const dbPath = process.env.DB_PATH || './nutritrace.db';
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 const db = new Database(dbPath);
+registerPlanningFunctions(db);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
