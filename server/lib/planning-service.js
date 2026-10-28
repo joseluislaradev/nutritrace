@@ -5,6 +5,7 @@ import { canonical, convert, practical } from './purchase-units.js';
 import { changeContext } from './planning-storage.js';
 import { nutritionGoals, externalBody } from './body-source-policy.js';
 import { resolveGoalFor, percentGoalToGrams } from '../../src/lib/goal-resolver.js';
+import { diaryPlan, recordPlannedMeal, slotPreview } from './planned-diary.js';
 
 export function fail(message, status=400) { const e=new Error(message);e.status=status;throw e; }
 const stamp=()=>new Date().toISOString();
@@ -149,13 +150,16 @@ export class PlanningService {
     return {ingredients,warnings,sources:[...sources.values()]};
   }
   nutrition(u,input){
-    const menu=this.resolve(u,input),days=[],weekly={},warnings=[];
+    const menu=this.resolve(u,input),days=[],weekly={},warnings=[],catalogue=new Map();
     const settings=this.db.prepare("SELECT key,value FROM user_settings WHERE COALESCE(user_id,0)=? AND deleted_at IS NULL AND key IN ('goals','waterGoalMl')").all(u);
     const goals=Object.fromEntries(settings.map(r=>[r.key,JSON.parse(r.value)]));
     goals.goals=nutritionGoals(goals.goals||{});
     for(const day of menu.days){
-      const total={},coverage={};
-      for(const slot of day.slots){const row=this.catalog(u,slot.type==='food'?'foods':'meals',slot.id);addNutrition(total,numericNutrition(row.nutrition),slot.servings);
+      const total={},coverage={},slots=[];
+      for(const slot of day.slots){const key=slot.type+':'+slot.id;
+        if(!catalogue.has(key))catalogue.set(key,this.catalog(u,slot.type==='food'?'foods':'meals',slot.id));
+        const row=catalogue.get(key);addNutrition(total,numericNutrition(row.nutrition),slot.servings);
+        try{slots.push({...slot,preview:slotPreview(this,u,slot,row)});}catch(e){slots.push({...slot,unavailable:e.message});}
         for(const key of Object.keys(row.nutrition))if(!row.items?.length || row.items.every(i=>typeof i.nutrition?.[key]==='number'))coverage[key]=(coverage[key]||0)+1;}
       const unknown=[...new Set([...Object.keys(total),...Object.keys(goals.goals)])].filter(k=>!day.slots.length||coverage[k]!==day.slots.length);
       if(unknown.length)warnings.push(`${day.date}: incomplete nutrient composition: ${unknown.join(', ')}`);
@@ -165,7 +169,7 @@ export class PlanningService {
         if(goal?.isPercent)target=percentGoalToGrams(target,resolveGoalFor(goals.goals.calories,day.date),({proteins:4,carbohydrates:4,fat:9})[key]);
         return [key,{target,estimated:total[key]??null,complete:!unknown.includes(key),difference:target!=null&&!unknown.includes(key)?round(total[key]-target):null}];
       }));
-      days.push({...day,nutrition:total,incomplete_nutrients:unknown,comparison});addNutrition(weekly,total,1);
+      days.push({...day,slots,nutrition:total,incomplete_nutrients:unknown,comparison});addNutrition(weekly,total,1);
     }
     return {...menu,days,weekly,goals,warnings,notice:'Nutrients absent from composition are unknown, not zero. Planning does not record consumption.'};
   }
@@ -249,6 +253,8 @@ export class PlanningService {
   }
   run(u,name,a){
     switch(name){
+      case 'get_diary_plan':return diaryPlan(this,u,a);
+      case 'record_planned_meal':return recordPlannedMeal(this,u,a);
       case 'get_planning_catalog':return Object.fromEntries(['foods','meals'].map(kind=>[kind,this.db.prepare(`SELECT id,name,portion,unit,revision,deleted_at FROM ${kind} WHERE COALESCE(user_id,0)=? AND (?=1 OR deleted_at IS NULL) ORDER BY id LIMIT ? OFFSET ?`).all(u,Number(a.include_deleted),a.limit,a.offset)]));
       case 'list_planning_documents':return this.db.prepare('SELECT * FROM planning_documents WHERE user_id=? AND kind=? AND (?=1 OR deleted=0) ORDER BY updated_at DESC,id').all(u,a.kind,Number(a.include_deleted)).map(parse);
       case 'list_planning_templates':return this.list(u,'template');

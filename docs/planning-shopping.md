@@ -307,3 +307,10 @@ El modelo completo de decisiones, fuentes científicas, cálculos fundamentados,
 restricciones, revisión de evidencia, auditoría de metas y versionado de Gym Log
 pertenece a las siguientes fases. No se generaron justificaciones históricas ni
 se investigaron las decisiones nutricionales o de entrenamiento actuales.
+
+## Integración con Diario y nueva navegación
+
+La ampliación [Diario planificado](planned-diary.md) organiza las vistas en
+Mi semana, Compras y Editar plan, y añade `get_diary_plan` y
+`record_planned_meal` sin retirar las herramientas anteriores. Allí se documentan
+los vínculos con el consumo real, concurrencia, reintentos y pruebas de navegador.

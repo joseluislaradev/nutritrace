@@ -3,6 +3,8 @@ import { planningService } from '../../planning-service.js';
 import { toolResult, toolError } from '../_util.js';
 
 const descriptions={
+  get_diary_plan:'Read planned meals and actual consumption for an explicit date. Automatically selects the sole active template; if needs_selection, choose a returned template_id. Returns ingredient previews, pending/consumed/modified/skipped status, linked entry_ids and separate planned/consumed totals. Planning never counts as consumption.',
+  record_planned_meal:'Consume or skip one planned occurrence after get_diary_plan. Pass state_revision as expected_revision plus expected_plan_revision and expected_items_revision from that read. Requires a stable idempotency_key for retries. Optional ingredient adjustments use preview.items indices and positive quantities/portions; omit removes that ingredient. replacement references a catalogue food/meal instead. Never changes template or recipe. Already recorded occurrences must be edited through existing diary tools, never logged again.',
   list_planning_documents:'List owned planning documents of a kind. include_deleted includes retired documents so their history can be read and restored.',
   get_planning_catalog:'List owned foods and meals/recipes with server IDs, portions, units and revisions for planning. Paginate with limit and offset; never substitute local device IDs.',
   list_planning_templates:'List saved recurring weekly menu templates. Monday is days[0]. No consumption is recorded.',

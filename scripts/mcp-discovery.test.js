@@ -65,6 +65,8 @@ test('real MCP client discovers a stable Gym-only OAuth catalogue with primary a
   assert.equal(client.getServerVersion().name,'nutritrace');
   const first=await client.listTools();const second=await client.listTools();
   assert.deepEqual(first,second);
+  assert.equal(first.tools.length,43,'41 existing Gym-mode tools plus the two planned-diary tools');
+  for(const name of ['get_diary_plan','record_planned_meal'])assert(first.tools.some(t=>t.name===name));
   for(const name of required)assert(first.tools.some(t=>t.name===name),name);
   assert(!first.tools.some(t=>['log_body_stat','get_body_composition'].includes(t.name)));
   assert.equal(catalogues.length,2);assert.deepEqual(catalogues[0],catalogues[1]);

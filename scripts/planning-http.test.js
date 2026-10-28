@@ -78,3 +78,18 @@ test('soft-delete with stale revision is rejected and consumption is preserved',
   assert.equal((await http('/api/meals/'+meal.id,{expected_revision:newer.revision},'DELETE')).status,200);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM diary').get().n,0);assert.equal((await mcp('get_entity_versions',{kind:'meals',id:String(meal.id)})).length,3);
 });
+
+test('planned consumption uses the same REST/MCP transaction, preserves old tools and rejects duplicate retries',async()=>{
+  const template=await mcp('save_planning_template',{data:{name:'Integración Diario',starts_on:'2026-10-01',status:'active',days:Array.from({length:7},()=>({slots:[{slot_id:'lunch',type:'food',id:food,servings:2,time:'14:30',label:'Comida'}]}))},...meta()});
+  const date='2026-10-27';
+  const read=await http('/api/planning/get_diary_plan',{date,template_id:template.id});assert.equal(read.status,200);
+  const slot=read.data.slots[0];
+  const args={date,template_id:template.id,slot_id:'lunch',action:'consume',meal:1,expected_plan_revision:slot.plan_revision,expected_items_revision:read.data.items_revision,...meta()};
+  const saved=await mcp('record_planned_meal',args);assert.equal(saved.view.consumed_totals.calories,200);
+  assert.deepEqual((await http('/api/planning/record_planned_meal',args)).data,saved);
+  const refreshed=await mcp('get_diary_plan',{date,template_id:template.id});assert.equal(refreshed.slots[0].status,'consumed');assert.equal(refreshed.slots[0].entry_ids.length,1);
+  const denied=await http('/api/planning/record_planned_meal',{...args,idempotency_key:randomUUID()});assert.equal(denied.status,409);
+  const registered=new Map(),registrar=authorizedRegistrar({registerTool:(n,d,h)=>registered.set(n,{d,h})},{authKind:'oauth',userId:owner,scopes:['mcp:read']});
+  registerPlanningTools(registrar,{userId:owner},'write');assert((await registered.get('record_planned_meal').h(args)).isError);
+  const tools=(await client.listTools()).tools;for(const name of ['log_food','log_meal','log_water','edit_diary_entry','delete_diary_entry','get_diary_plan','record_planned_meal'])assert(tools.some(t=>t.name===name),name);
+});

@@ -3,7 +3,7 @@
   import { closeOnBack } from '../lib/back-stack.js';
   import { onMount, onDestroy, tick } from 'svelte';
   import { fold } from '../lib/fold.js';
-  import { push } from 'svelte-spa-router';
+  import { push, querystring } from 'svelte-spa-router';
   import { _ } from 'svelte-i18n';
   import DatePicker from '../components/ui/DatePicker.svelte';
   import DateInput  from '../components/ui/DateInput.svelte';
@@ -13,6 +13,7 @@
   import { tweened } from 'svelte/motion';
   import { cubicOut } from 'svelte/easing';
 
+  import PlannedMeals from '../components/diary/PlannedMeals.svelte';
   import MacroRing    from '../components/diary/MacroRing.svelte';
   import DaySummaryWidget from '../components/diary/DaySummaryWidget.svelte';
   import WaterWidget       from '../components/diary/WaterWidget.svelte';
@@ -1698,7 +1699,10 @@
     const today = localDateStr();
     let storedDate;
     currentDate.subscribe(v => storedDate = v)();
-    const targetDate = storedDate || today;
+    const requestedDate = new URLSearchParams($querystring).get('date');
+    const validRequestedDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate||'') &&
+      Number.isFinite(Date.parse(requestedDate+'T00:00:00Z')) && new Date(requestedDate+'T00:00:00Z').toISOString().slice(0,10)===requestedDate;
+    const targetDate = validRequestedDate ? requestedDate : storedDate || today;
     // Skip the network round-trip when the store already holds this date —
     // App.svelte's {#key $location} unmounts + remounts Diary on every nav,
     // and refetching here causes a visible empty-then-populated flicker
@@ -2103,6 +2107,12 @@
         <span>{$_('diary.server_error.unreachable')} <button class="server-error-retry" on:click={() => loadEntry($currentDate)}>{$_('diary.server_error.retry')}</button></span>
       </div>
     {/if}
+    <PlannedMeals date={$currentDate} entry={$currentEntry} mealNames={$mealNames}
+      on:recorded={async e=>{
+        if(isNative){try{const {fullSync}=await import('../lib/sync.js');await fullSync(true);}catch{showError('El consumo está guardado en el servidor. Sincroniza para actualizar este teléfono.');return;}}
+        if($currentDate===e.detail.date)await loadEntry(e.detail.date);
+      }}
+      on:edit={e=>{const i=(entry?.items||[]).findIndex(it=>it.uuid===e.detail.uuid);if(i>=0)openEditItem({...entry.items[i],_i:i});}}/>
     <!-- Intermittent fasting widget — opt-in via Settings → Diary -->
     {#if $fastingEnabled}
       <FastingWidget />

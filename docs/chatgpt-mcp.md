@@ -48,7 +48,7 @@ versiones. Contratos, permisos, migración, pruebas y actualización de la conex
 sobre administrar recetas mediante MCP se sustituyen por los contratos de esa
 ampliación cuando esta versión del servidor esté desplegada.
 
-En modo Gym, ChatGPT puede consultar biblioteca, comidas, diario, totales, perfil nutricional y metas. Se reutilizan `log_food`, `log_meal` y `log_water`. Para registrar, los alimentos deben existir en catálogo; `create_food` permite crear uno con confirmación y permiso adicional; `log_meal` registra comidas guardadas, no recetas de la biblioteca como si fueran comidas. Para recetas, usar los flujos originales de la PWA; los nuevos productos también pueden crearse mediante MCP. No reconstruir recetas ni alterar las guardadas por registrar un snack.
+En modo Gym, ChatGPT puede consultar biblioteca, comidas, diario, totales, perfil nutricional y metas. Se reutilizan `log_food`, `log_meal` y `log_water`. Para registrar, los alimentos deben existir en catálogo; `create_food` permite crear uno con confirmación y permiso adicional; `log_meal` registra comidas guardadas, no recetas de la biblioteca como si fueran comidas. Las recetas se administran desde la PWA o con `save_catalog_meal`; `record_planned_meal` registra una receta planificada respetando su rendimiento. Los nuevos productos también pueden crearse mediante MCP. No reconstruir recetas ni alterar las guardadas por registrar un snack.
 
 No se publica ni ejecuta `log_body_stat` o `get_body_composition` en modo Gym. No hay `get_body_stats` nuevo. El registro corporal corresponde a `log_body_measurement` de Gym. OAuth admite `create_food`, `edit_diary_entry` y `delete_diary_entry` únicamente con `mcp:destroy`, `MCP_DESTROY_ENABLED=1` y `confirm:true`. Ninguna permite borrar días, historiales, bases de datos ni medidas corporales. La UI nutricional original conserva sus correcciones de cantidades.
 
@@ -83,6 +83,10 @@ Se compara y escribe dentro de una transacción. Un cambio concurrente produce `
 
 Los registros append **no son idempotentes**: alimento, comida y agua pueden duplicarse si se repiten. Ante respuesta perdida, consultar diario/totales y resolver con el usuario. No configurar reintentos automáticos de escrituras. Las annotations son descripciones, no controles de seguridad ni garantía de confirmación humana por llamada.
 
+La integración de comidas planificadas con el diario añade `get_diary_plan` y
+`record_planned_meal` (lectura y escritura respectivamente). Contratos,
+concurrencia y comprobación tras desplegar: [Diario planificado](planned-diary.md).
+
 ## Instalar como aplicación privada de ChatGPT
 
 Después de desplegar y verificar HTTPS/discovery/401:
@@ -111,7 +115,7 @@ El 2026-10-25 los logs aportados por el propietario mostraron `POST /api/mcp` �
 
 Defecto local reproducido y corregido: SDK 1.30 ignora el `securitySchemes` principal de `registerTool`. El transporte ahora conserva ese campo en el JSON-RPC real de `tools/list`, además de `_meta.securitySchemes`. No modifica el despacho de herramientas ni concede permisos.
 
-`node --experimental-global-webcrypto --test scripts/mcp-discovery.test.js` usa el cliente oficial MCP Streamable HTTP, SQLite temporal, JWT RSA sintético y los routers reales. Negocia `initialize`, envía `notifications/initialized` y obtiene `tools/list` dos veces. Verifica las seis herramientas `get_goals`, `search_foods`, `log_food`, `create_food`, `edit_diary_entry`, `delete_diary_entry`, catálogo estable de 19 herramientas en modo Gym, validación de todos los esquemas JSON y ambos descriptores OAuth. **Es evidencia local, no una llamada autenticada al Railway real.**
+`node --experimental-global-webcrypto --test scripts/mcp-discovery.test.js` usa el cliente oficial MCP Streamable HTTP, SQLite temporal, JWT RSA sintético y los routers reales. Negocia `initialize`, envía `notifications/initialized` y obtiene `tools/list` dos veces. Verifica las seis herramientas `get_goals`, `search_foods`, `log_food`, `create_food`, `edit_diary_entry`, `delete_diary_entry`, catálogo estable de 43 herramientas en modo Gym (19 originales, 22 de planificación y 2 de diario planificado), validación de todos los esquemas JSON y ambos descriptores OAuth. **Es evidencia local, no una llamada autenticada al Railway real.**
 
 ### Leer el motivo de un rechazo sin exponer credenciales
 

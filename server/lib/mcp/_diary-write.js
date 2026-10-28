@@ -17,7 +17,7 @@
  * The mutator must always return a value; returning null is not
  * supported.
  */
-import db from '../../db.js';
+import defaultDb from '../../db.js';
 import { safeJson } from './_util.js';
 import { ensureUuids } from '../diary-merge.js';
 
@@ -51,14 +51,15 @@ export class DiaryTombstonedError extends Error {
  * @param {function} mutator    ({items, water, bodyStats, notes}) => same shape
  * @returns {object} the final shape actually written
  */
-export function mutateDiaryDay(userId, date, mutator) {
+export function mutateDiaryDay(userId, date, mutator, database = defaultDb) {
+  const db = database;
   const tx = db.transaction(() => {
     // Look up any row (tombstoned or not) so we can distinguish
     // "row doesn't exist yet" from "row exists but was erased".
     const raw = db.prepare(
-      `SELECT items, water, body_stats, notes, deleted_at
+      `SELECT id, items, water, body_stats, notes, deleted_at
          FROM diary
-        WHERE user_id = ? AND date = ?`
+        WHERE user_id IS ? AND date = ?`
     ).get(userId, date);
 
     if (raw && raw.deleted_at) throw new DiaryTombstonedError(date);
@@ -93,7 +94,9 @@ export function mutateDiaryDay(userId, date, mutator) {
     const bodyStatsJson = JSON.stringify(next.bodyStats ?? {});
     const notes         = next.notes ?? null;
 
-    db.prepare(
+    if (raw) db.prepare(`UPDATE diary SET items=?, body_stats=?, water=?, notes=?, updated_at=datetime('now') WHERE id=?`)
+      .run(itemsJson, bodyStatsJson, waterJson, notes, raw.id);
+    else db.prepare(
       `INSERT INTO diary (user_id, date, items, body_stats, water, notes, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
        ON CONFLICT(date, user_id) DO UPDATE SET

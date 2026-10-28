@@ -1000,6 +1000,7 @@ const _DIARY_KEEP = new Set([
   'id', 'food_server_id', 'is_recipe',
   'name', 'brand', 'portion', 'unit', 'quantity',
   'nutrition', 'notes', 'imgUrl',
+  'planned_meal',
   'source', 'source_meal_id',
 ]);
 function _shrinkDiaryItem(it) {

@@ -165,3 +165,14 @@ test('regenerating after a recipe edit uses the new recipe version and keeps pur
   assert.equal(list.payload.sources.find(r=>r.kind==='meals').revision,changed.revision);assert.equal(list.payload.differences[0].before_required,1750);
   assert(list.payload.source_changes.some(r=>r.kind==='meals'&&r.before_revision===meal.revision&&r.after_revision===changed.revision));
 });
+
+test('checkboxes, partial purchases and manual quantities retain the product category',()=>{
+ const f=fixture(),food=f.food('Leche','ml');
+ f.exec('save_pantry_item',{data:{food_id:food,stock:0,unit:'ml',category:'lácteos'},...meta()});
+ const t=template(f,[slot('food',food)]);let list=generate(f,t);
+ const key=list.payload.items[0].key;
+ for(const patch of [{purchased:true},{purchased_quantity:100},{override_quantity:500},{name:'Leche para la semana'}]){
+  list=f.exec('update_shopping_item',{id:list.id,patch:{key,...patch},...meta(list.revision)});
+  assert.equal(list.payload.items[0].category,'lácteos');assert.equal(list.payload.items[0].custom_category,undefined);
+ }
+});
